@@ -1,169 +1,187 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal RH | Início</title>
     
-    <title>Portal RH Dividata</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <style>
-        /* --- 1. PALETA DE CORES GLOBAL --- */
-        :root {
-            --bg-color: #EFEDE4;
-            --primary-orange: #FF6600;
-            --text-dark: #1A1A1A;
-            --card-white: #FFFFFF;
-            --text-gray: #666666;
-        }
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
 
-        /* --- 2. CONFIGURAÇÕES GERAIS --- */
+    <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-dark);
-            margin: 0;
+            background-color: #f4f7f6;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            min-height: 100vh;
+            align-items: center;
             padding: 20px;
         }
 
-        /* --- 3. CABEÇALHO --- */
-        h1 { 
-            font-size: 2.5rem; 
-            margin-bottom: 0.5rem; 
+        .welcome-section {
             text-align: center;
-        }
-        .highlight { color: var(--primary-orange); font-weight: 800; }
-        .subtitle { 
-            font-size: 1.2rem; 
-            color: var(--text-gray); 
-            margin-bottom: 3rem; 
-            text-align: center;
+            margin-bottom: 3rem;
         }
 
-        /* --- 4. ÁREA DOS CARDS (GRID FLEXÍVEL) --- */
-        .dashboard-grid {
-            display: flex;
-            gap: 1.5rem; /* Espaçamento entre cards */
-            justify-content: center; /* Centraliza o bloco */
-            flex-wrap: wrap; /* Permite quebrar linha APENAS se a tela for pequena */
-            width: 100%;
-            max-width: 1400px; /* Largura aumentada para caber 4 cards */
+        .welcome-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
         }
 
-        /* --- 5. CARTÕES --- */
-        .card {
-            background-color: var(--card-white);
-            /* Tamanho base ajustado para 220px para caber 4 lado a lado */
-            flex: 1 1 220px; 
-            max-width: 350px; 
-            
-            padding: 2.5rem 1.5rem;
-            border-radius: 16px;
+        .highlight {
+            background: linear-gradient(135deg, #FF6600, #ff8c42);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .welcome-subtitle {
+            font-size: 1.1rem;
+            color: #7f8c8d;
+        }
+
+        /* CARD MODERNO */
+        .menu-card {
+            border: none;
+            border-radius: 20px;
+            background: #fff;
+            padding: 2rem;
             text-align: center;
             text-decoration: none;
-            color: var(--text-dark);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            border: 1px solid transparent;
+            color: #34495e;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            height: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            position: relative;
+            overflow: hidden;
         }
 
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            border-color: rgba(255, 102, 0, 0.2);
+        .menu-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            color: #34495e; /* Mantém a cor do texto */
         }
 
-        .card-icon {
-            font-size: 3rem;
-            color: var(--primary-orange);
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        .card-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 0.5rem; display: block; }
-        .card-desc { font-size: 0.95rem; color: var(--text-gray); display: block; }
-
-        /* --- 6. FORMULÁRIO DE SAIR --- */
-        .logout-form {
-            margin-top: 4rem;
-        }
-
-        .logout-btn {
-            background: none;
-            border: none;
-            color: var(--text-gray);
-            font-size: 1rem;
-            font-family: inherit; 
-            cursor: pointer;
-            transition: color 0.2s;
-            padding: 0;
+        .card-icon-box {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
             display: flex;
             align-items: center;
-            gap: 8px; 
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+            transition: transform 0.3s ease;
         }
 
+        .menu-card:hover .card-icon-box {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        /* Cores Específicas para cada Card */
+        .card-admin .card-icon-box { background: rgba(52, 152, 219, 0.1); color: #3498db; }
+        .card-gestor .card-icon-box { background: rgba(255, 159, 67, 0.1); color: #ff9f43; }
+        .card-ponto .card-icon-box { background: #000e8d59; color: #000e8dff; }
+        .card-ferias .card-icon-box { background: rgba(155, 89, 182, 0.1); color: #9b59b6; }
+
+        .card-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
+        .card-desc { font-size: 0.9rem; color: #95a5a6; }
+
+        .logout-btn {
+            margin-top: 3rem;
+            color: #e74c3c;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 10px 25px;
+            border-radius: 50px;
+            border: 1px solid #fadbd8;
+            background: #fff;
+            transition: all 0.2s;
+        }
+        
         .logout-btn:hover {
-            color: var(--primary-orange);
+            background: #e74c3c;
+            color: #fff;
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
         }
-
     </style>
 </head>
 <body>
 
-    <h1>Portal <span class="highlight">RH DIVIDATA</span></h1>
-    <p class="subtitle">Olá, <strong>{{ user.first_name|default:user.username }}</strong>. Selecione uma opção abaixo:</p>
-
-    <div class="dashboard-grid">
-        
-        {% if can_access_rh_area %}
-        <a href="/admin/" class="card">
-            <i class="fa-solid fa-building-user card-icon"></i>
-            <span class="card-title">Administração RH</span>
-            <span class="card-desc">Gerenciar funcionários e equipes</span>
-        </a>
-        {% endif %}
-
-        {% if is_gestor %}
-        <a href="{% url 'area_gestor' %}" class="card">
-            <i class="fa-solid fa-users card-icon"></i>
-            <span class="card-title">Minha Equipe</span>
-            <span class="card-desc">Assinar folhas e ver histórico</span>
-        </a>
-        {% endif %}
-
-        <a href="{% url 'folha_ponto' %}" class="card">
-            <i class="fa-solid fa-clock card-icon"></i>
-            <span class="card-title">Registrar Ponto</span>
-            <span class="card-desc">Controle de entrada e saída</span>
-        </a>
-{% if tem_ferias %}
-    <a href="{% url 'minhas_ferias' %}" class="card">
-        <i class="fa-solid fa-umbrella-beach card-icon"></i>
-        <span class="card-title">Minhas Férias</span>
-        <span class="card-desc">Avisos e Recibos</span>
-    </a>
-    {% endif %}
+    <div class="welcome-section">
+        <h1 class="welcome-title">Portal <span class="highlight">RH DIVIDATA</span></h1>
+        <p class="welcome-subtitle">Olá, <strong>{{ user.first_name|default:user.username }}</strong>. O que você deseja fazer hoje?</p>
     </div>
 
-    <form action="{% url 'logout' %}" method="post" class="logout-form">
+    <div class="container">
+        <div class="row g-4 justify-content-center">
+            
+            {% if can_access_rh_area %}
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="/admin/" class="menu-card card-admin">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-building-user"></i>
+                    </div>
+                    <span class="card-title">Área RH</span>
+                    <span class="card-desc">Gerenciar sistema e equipes</span>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if is_gestor %}
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'area_gestor' %}" class="menu-card card-gestor">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-users-cog"></i>
+                    </div>
+                    <span class="card-title">Minha Equipe</span>
+                    <span class="card-desc">Aprovar pontos e assinaturas</span>
+                </a>
+            </div>
+            {% endif %}
+
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'folha_ponto' %}" class="menu-card card-ponto">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <span class="card-title">Meu Ponto</span>
+                    <span class="card-desc">Registrar entrada e saída</span>
+                </a>
+            </div>
+
+            {% if tem_ferias %}
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'minhas_ferias' %}" class="menu-card card-ferias">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-umbrella-beach"></i>
+                    </div>
+                    <span class="card-title">Minhas Férias</span>
+                    <span class="card-desc">Avisos e recibos de férias</span>
+                </a>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <form action="{% url 'logout' %}" method="post">
         {% csrf_token %}
         <button type="submit" class="logout-btn">
-            <i class="fa-solid fa-arrow-right-from-bracket"></i> Sair do sistema
+            <i class="fa-solid fa-arrow-right-from-bracket me-2"></i> Sair do Sistema
         </button>
     </form>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

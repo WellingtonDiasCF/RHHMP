@@ -1201,9 +1201,10 @@ except ImportError:
     pass
 
 @login_required
+@login_required
 def gerar_aviso_ferias_pdf(request, ferias_id):
     # Garante que é admin ou RH para gerar
-    if not request.user.is_staff:
+    if not (request.user.is_staff or usuario_eh_rh(request.user)):
         return redirect('home')
         
     ferias = get_object_or_404(Ferias, id=ferias_id)
@@ -1212,7 +1213,7 @@ def gerar_aviso_ferias_pdf(request, ferias_id):
     # Dados calculados
     dias_ferias = (ferias.data_fim - ferias.data_inicio).days + 1
     
-    # HTML do Documento (Estilizado para parecer o PDF enviado)
+    # HTML do Documento
     html_string = render_to_string('core_rh/pdf_aviso_ferias.html', {
         'ferias': ferias,
         'func': func,
@@ -1221,17 +1222,20 @@ def gerar_aviso_ferias_pdf(request, ferias_id):
     })
 
     # Gera o PDF
+    # 'optimize_size' ajuda um pouco na velocidade e tamanho final
     html = HTML(string=html_string)
-    pdf_file = html.write_pdf()
+    pdf_file = html.write_pdf(optimize_size=('fonts', 'images'))
 
-    # Retorna para download/visualização
+    # Configura o nome do arquivo
+    nome_func = func.nome_completo.strip().replace(' ', '_')
+    periodo_limpo = ferias.periodo_aquisitivo.replace('/', '-')
+    filename = f"Notificação_de_Férias-{nome_func}-{periodo_limpo}.pdf"
+
+    # Retorna para download (attachment força o download)
     response = HttpResponse(pdf_file, content_type='application/pdf')
-    filename = f"Aviso_Ferias_{func.nome_completo.replace(' ', '_')}.pdf"
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    
     return response
-
-    # --- ADICIONE NO FINAL DO ARQUIVO core_rh/views.py ---
-
 @login_required
 def admin_ferias_partial_view(request):
     # Verifica permissão

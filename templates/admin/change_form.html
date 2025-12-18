@@ -7,21 +7,19 @@
     {{ media }}
     
     <style>
-        /* --- 1. LIMPEZA TOTAL (Remove tudo que é padrão do Django) --- */
-        #content-main { margin: 0 !important; width: 100% !important; }
-        
-        /* Esconde ícones de ajuda, calendário antigo, botões de adicionar (+) e lupas nativas */
+        /* --- 1. LIMPEZA DE ARTEFATOS (CORREÇÃO FLUTUANTE) --- */
+        .help-tooltip, 
+        .help-icon, 
         .datetimeshortcuts, 
-        .related-widget-wrapper-link, 
-        .help, 
-        .selector-chooser, 
-        .selector-available, 
-        .selector-chosen,
-        .related-widget-wrapper > a { 
+        .related-widget-wrapper-link,
+        .selector-chooser img, 
+        .selector .help-icon { 
             display: none !important; 
         }
 
-        /* --- 2. CONTAINER PRINCIPAL E PASSOS --- */
+        /* --- 2. ESTRUTURA GLOBAL --- */
+        #content-main { margin: 0 !important; width: 100% !important; }
+        
         fieldset.module {
             background: #fff;
             border: 0;
@@ -29,11 +27,10 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.05);
             margin-bottom: 30px !important;
             padding: 0 !important;
-            /* Permite que o dropdown saia da caixa sem cortar */
-            overflow: visible !important; 
+            overflow: visible !important;
+            position: relative;
         }
 
-        /* Títulos dos Passos */
         fieldset.module h2 {
             padding: 15px 25px !important;
             margin: 0 !important;
@@ -43,28 +40,31 @@
             color: #fff !important;
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
+            background: #64748B; /* Cor padrão de segurança (Cinza) caso falte definição */
         }
 
-        /* Cores */
-        fieldset.module:nth-of-type(1) h2 { background: linear-gradient(135deg, #FF6600, #ff8533); }
-        fieldset.module:nth-of-type(2) h2 { background: linear-gradient(135deg, #2563EB, #3B82F6); }
-        fieldset.module:nth-of-type(3) h2 { background: linear-gradient(135deg, #059669, #10B981); }
-        fieldset.module:nth-of-type(4) h2 { background: #64748B; }
+        /* --- CORES DOS CABEÇALHOS (AGORA COM TODOS OS 6) --- */
+        fieldset.module:nth-of-type(1) h2 { background: linear-gradient(135deg, #FF6600, #ff8533); } /* Laranja */
+        fieldset.module:nth-of-type(2) h2 { background: linear-gradient(135deg, #2563EB, #3B82F6); } /* Azul */
+        fieldset.module:nth-of-type(3) h2 { background: linear-gradient(135deg, #059669, #10B981); } /* Verde */
+        fieldset.module:nth-of-type(4) h2 { background: #64748B; } /* Cinza */
+        
+        /* CORREÇÃO: Adicionadas cores para Corporativo e Ponto */
+        fieldset.module:nth-of-type(5) h2 { background: linear-gradient(135deg, #7C3AED, #8B5CF6); } /* Roxo (Corporativo) */
+        fieldset.module:nth-of-type(6) h2 { background: linear-gradient(135deg, #DC2626, #EF4444); } /* Vermelho (Ponto) */
 
-        /* --- 3. GRID SYSTEM (ALINHAMENTO PERFEITO) --- */
+        /* --- 3. GRID SYSTEM --- */
         .form-row {
             padding: 20px 25px !important;
             border-bottom: 1px solid #f1f5f9;
-            /* Grid de 2 colunas iguais */
             display: grid;
             grid-template-columns: 1fr 1fr; 
-            gap: 30px; /* Espaço entre as colunas */
-            align-items: start; /* Alinha no topo para evitar pulos se a label for grande */
+            gap: 30px; 
+            align-items: start;
+            position: relative;
         }
         
-        /* Se a linha tiver apenas 1 campo, ocupa as 2 colunas */
-        .form-row.single-field { grid-template-columns: 1fr; }
-
+        .form-row.single-field { grid-template-columns: 1fr !important; }
         .field-box { width: 100%; position: relative; }
 
         label {
@@ -76,59 +76,59 @@
             width: 100% !important;
         }
 
-        /* --- 4. INPUTS E SELECTS (ALTURA UNIFICADA) --- */
-        /* Todos os inputs visíveis devem ser iguais */
+        /* --- 4. INPUTS E SELECTS --- */
         input[type="text"], 
         input[type="number"], 
         input[type="email"], 
         input[type="date"], 
-        select,
-        .vTextField {
+        input[type="time"], /* Importante para o Ponto */
+        .vTextField, 
+        .vTimeField,
+        textarea {
             width: 100% !important;
-            height: 50px !important; /* Altura fixa */
-            padding: 0 15px;
+            min-height: 50px !important; 
+            padding: 10px 15px;
             font-size: 1rem;
             border: 1px solid #CBD5E1;
             border-radius: 10px;
-            background-color: #F8FAFC;
-            color: #334155;
+            background-color: #F8FAFC !important;
+            color: #334155 !important; /* Garante texto escuro */
             box-sizing: border-box;
-            /* Remove estilos nativos */
-            -webkit-appearance: none;
-            appearance: none;
         }
 
-        /* Seta para Selects normais (Abono) */
-        select:not([multiple]) {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748B'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 15px center;
-            background-size: 18px;
-            padding-right: 40px;
+        /* Selects Normais */
+        select:not([multiple]):not(.select2-hidden-accessible) {
+            width: 100% !important;
+            height: 50px !important;
+            padding: 0 15px;
+            border: 1px solid #CBD5E1;
+            border-radius: 10px;
+            background-color: #F8FAFC !important;
+            color: #334155 !important;
         }
 
-        /* --- 5. CORREÇÃO CRÍTICA: FUNCIONÁRIO DUPLICADO --- */
-        
-        /* Esconde AGRESSIVAMENTE o select original do Django */
-        .related-widget-wrapper > select,
-        select.admin-autocomplete {
-            display: none !important;
-            visibility: hidden !important;
-            width: 0 !important;
-            height: 0 !important;
-            opacity: 0 !important;
+        /* --- 5. SELECT2 (AUTOCOMPLETE) --- */
+        select.select2-hidden-accessible {
+            border: 0 !important;
+            clip: rect(0 0 0 0) !important;
+            height: 1px !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            padding: 0 !important;
             position: absolute !important;
-            z-index: -100 !important;
+            width: 1px !important;
+            visibility: hidden !important;
         }
 
-        /* Estiliza o Select2 (o campo de busca bonito) */
         .select2-container {
             width: 100% !important;
+            max-width: 100% !important;
             display: block !important;
+            z-index: 50; 
         }
-        
-        .select2-container .select2-selection--single {
-            height: 50px !important; /* Mesma altura dos inputs */
+
+        .select2-selection--single {
+            height: 50px !important;
             background-color: #F8FAFC !important;
             border: 1px solid #CBD5E1 !important;
             border-radius: 10px !important;
@@ -136,18 +136,116 @@
             align-items: center !important;
         }
 
-        .select2-container--default .select2-selection--single .select2-selection__rendered {
+        .select2-selection__rendered {
             line-height: 50px !important;
             padding-left: 15px !important;
             color: #334155 !important;
         }
 
-        .select2-container--default .select2-selection--single .select2-selection__arrow {
+        .select2-selection__arrow {
             height: 48px !important;
+            top: 1px !important;
             right: 10px !important;
         }
 
-        /* --- 6. BOTÃO PDF --- */
+        /* --- 6. FILTER HORIZONTAL (EQUIPES SECUNDÁRIAS) --- */
+        .selector {
+            width: 100% !important;
+            display: flex !important;
+            align-items: center;
+            gap: 15px;
+            float: none !important;
+        }
+        
+        .selector-available, .selector-chosen {
+            flex: 1;
+            width: 45% !important;
+            float: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .selector h2 {
+            background: #f1f5f9 !important;
+            color: #64748B !important;
+            font-size: 0.75rem !important;
+            text-transform: uppercase;
+            padding: 10px !important;
+            margin: 0 !important;
+            border: 1px solid #CBD5E1;
+            border-bottom: 0;
+            border-radius: 8px 8px 0 0;
+            width: auto !important;
+            float: none !important;
+        }
+
+        .selector select {
+            height: 200px !important;
+            width: 100% !important;
+            border: 1px solid #CBD5E1 !important;
+            border-radius: 0 0 8px 8px !important;
+            background: #fff !important;
+            color: #333 !important; /* CORREÇÃO: Força texto escuro */
+            padding: 5px !important;
+            overflow-y: auto !important;
+        }
+
+        .selector-chooser {
+            display: flex !important;
+            flex-direction: column;
+            justify-content: center;
+            padding: 0 !important;
+            margin: 0 !important;
+            list-style: none !important;
+            background: transparent !important;
+            float: none !important;
+            width: 40px !important;
+        }
+
+        .selector-chooser li {
+            margin: 5px 0 !important;
+            padding: 0 !important;
+            list-style: none !important;
+            float: none !important;
+            border: none !important;
+            background: none !important;
+        }
+
+        .selector-add, .selector-remove {
+            background: #E2E8F0 !important;
+            border: none !important;
+            width: 32px !important;
+            height: 32px !important;
+            border-radius: 50% !important;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 1 !important;
+            text-indent: 0 !important;
+            font-size: 0 !important;
+        }
+        
+        .selector-add:after { content: '→'; font-size: 16px; font-weight: bold; color: #475569; }
+        .selector-remove:after { content: '←'; font-size: 16px; font-weight: bold; color: #475569; }
+        .selector-add:hover, .selector-remove:hover { background: #FF6600 !important; }
+        .selector-add:hover:after, .selector-remove:hover:after { color: white; }
+
+        .selector-filter {
+            border: 1px solid #CBD5E1;
+            border-bottom: 0;
+            padding: 5px !important;
+            background: #fff;
+        }
+        .selector-filter input {
+            width: 100% !important;
+            min-height: 30px !important;
+            height: 30px !important;
+            margin: 0 !important;
+            color: #333 !important;
+        }
+
+        /* --- 7. EXTRAS --- */
         .readonly-box {
             background: #EFF6FF;
             border: 1px dashed #3B82F6;
@@ -159,18 +257,17 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 50px; /* Garante alinhamento se estiver ao lado de um input */
+            min-height: 50px;
         }
+        
         .field-link_gerar_pdf label { display: none !important; }
 
-        /* Foco */
         input:focus, select:focus, .select2-container--open .select2-selection {
             border-color: #FF6600 !important;
             background-color: #fff !important;
             box-shadow: 0 0 0 4px rgba(255, 102, 0, 0.1) !important;
             outline: none;
         }
-
     </style>
 {% endblock %}
 
@@ -213,37 +310,31 @@
                         <div class="form-row {% if line.fields|length == 1 %}single-field{% endif %}">
                             {% for field in line %}
                                 <div class="field-box {% if field.field.name %}field-{{ field.field.name }}{% endif %}">
-                                    
                                     {% if field.is_checkbox %}
                                         <div class="form-check mt-4 ps-0">
                                             {{ field.field }}
                                             <label class="form-check-label ms-2 d-inline text-dark">{{ field.field.label }}</label>
                                         </div>
                                     {% else %}
-                                        
                                         {% if not field.is_readonly %}
                                             <label for="{{ field.field.id_for_label }}">
                                                 {{ field.field.label }}
                                                 {% if field.field.field.required %}<span class="required" style="color:red">*</span>{% endif %}
                                             </label>
-                                            
                                             <div class="input-container">
                                                 {{ field.field }}
                                             </div>
-                                            
                                             {% if field.field.help_text %}
                                                 <div class="form-text text-muted small mt-1">{{ field.field.help_text|safe }}</div>
                                             {% endif %}
                                             {% if field.field.errors %}
                                                 <div class="text-danger small mt-1 fw-bold">{{ field.field.errors.as_text }}</div>
                                             {% endif %}
-
                                         {% else %}
                                             <div class="readonly-box">
                                                 {{ field.contents|safe }}
                                             </div>
                                         {% endif %}
-                                        
                                     {% endif %}
                                 </div>
                             {% endfor %}
@@ -261,10 +352,18 @@
 
         <div class="submit-row card-body bg-light rounded-4 p-4 mt-4 d-flex justify-content-between align-items-center shadow-sm border">
             {% if change and not is_popup %}
-                <a href="delete/" class="btn btn-outline-danger rounded-pill px-4 fw-bold border-0"><i class="fas fa-trash-alt me-2"></i> Deletar</a>
+                <a href="{% url opts|admin_urlname:'delete' original.pk|admin_urlquote %}" class="btn btn-outline-danger rounded-pill px-4 fw-bold border-0">
+                    <i class="fas fa-trash-alt me-2"></i> Deletar
+                </a>
+            {% else %}
+                <div></div> 
             {% endif %}
+
             <div class="d-flex gap-3 ms-auto">
-                <input type="submit" value="Salvar Alterações" class="btn btn-primary rounded-pill px-5 py-3 fw-bold shadow" name="_save" style="background: #FF6600; border-color: #FF6600;">
+                {% if opts.model_name == 'ferias' %}
+                    <input type="submit" value="Salvar e Gerar PDF" class="btn btn-info rounded-pill px-4 py-3 fw-bold shadow text-white" name="_save_pdf" style="background: #17a2b8; border:none;">
+                {% endif %}
+                <input type="submit" value="Salvar Alterações" class="btn btn-primary rounded-pill px-5 py-3 fw-bold shadow" name="_continue" style="background: #FF6600; border-color: #FF6600;">
             </div>
         </div>
 
@@ -277,20 +376,7 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        
-        // 1. CORREÇÃO DUPLICIDADE FUNCIONÁRIO (Busca ativa pelo elemento original e oculta)
-        // O seletor abaixo pega o select que está dentro do wrapper do Django
-        const originalSelects = document.querySelectorAll('.related-widget-wrapper select');
-        originalSelects.forEach(sel => {
-            // Verifica se este select tem um irmão que é o container do Select2
-            if (sel.nextElementSibling && sel.nextElementSibling.classList.contains('select2-container')) {
-                sel.style.display = 'none';
-                sel.style.visibility = 'hidden';
-                sel.style.position = 'absolute';
-            }
-        });
-
-        // 2. CONVERTER DATAS PARA FORMATO NATIVO (DD/MM/YYYY -> YYYY-MM-DD)
+        // --- 1. CORREÇÃO DE DATAS ---
         const dateInputs = document.querySelectorAll('input.vDateField');
         dateInputs.forEach(input => {
             const native = document.createElement('input');
@@ -298,8 +384,6 @@
             native.className = input.className;
             native.id = input.id;
             native.name = input.name;
-            
-            // Mantém valor se existir
             if (input.value && input.value.includes('/')) {
                 const [d, m, y] = input.value.split('/');
                 native.value = `${y}-${m}-${d}`;
@@ -307,14 +391,40 @@
             input.parentNode.replaceChild(native, input);
         });
 
-        // 3. LIMPEZA FINAL VISUAL
+        // --- 2. LIMPEZA FINAL ---
         document.querySelectorAll('.datetimeshortcuts').forEach(el => el.remove());
+        document.querySelectorAll('.related-widget-wrapper-link').forEach(el => el.style.display = 'none');
         
-        // Garante que o botão PDF está limpo
         const pdfBox = document.querySelector('.field-link_gerar_pdf');
-        if(pdfBox) {
-            pdfBox.querySelectorAll('label').forEach(l => l.style.display = 'none');
+        if(pdfBox) pdfBox.querySelectorAll('label').forEach(l => l.style.display = 'none');
+
+        // --- 3. CORREÇÃO DUPLICIDADE SELECT2 (FÉRIAS) ---
+        // Se encontrar Select2 + Select Normal no mesmo lugar, esconde o Normal
+        function fixDuplicateSelect2() {
+            const containers = document.querySelectorAll('.related-widget-wrapper');
+            containers.forEach(wrapper => {
+                const hasSelect2 = wrapper.querySelector('.select2-container');
+                const select = wrapper.querySelector('select');
+                
+                if (hasSelect2 && select) {
+                    select.style.display = 'none';
+                    select.style.visibility = 'hidden';
+                    select.style.position = 'absolute';
+                    select.style.width = '0';
+                    select.style.height = '0';
+                }
+                
+                // Remove duplicatas reais se existirem
+                const select2List = wrapper.querySelectorAll('.select2-container');
+                if (select2List.length > 1) {
+                    select2List[0].remove();
+                }
+            });
         }
+
+        fixDuplicateSelect2();
+        setTimeout(fixDuplicateSelect2, 200);
+        setTimeout(fixDuplicateSelect2, 1000);
     });
 </script>
 {% endblock %}

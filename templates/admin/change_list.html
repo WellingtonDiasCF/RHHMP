@@ -207,7 +207,6 @@
         const status = elStatus ? elStatus.value : '';
         const query = elSearch ? elSearch.value : '';
 
-        // Url da nova view criada
         let url = `{% url 'admin_ferias_partial' %}?mes=${mes}&ano=${ano}`;
         if(status) url += `&status=${encodeURIComponent(status)}`;
         if(query) url += `&q=${encodeURIComponent(query)}`;
@@ -217,7 +216,6 @@
 
     function carregarPainelFerias(url) {
         const c = document.getElementById('rh-ferias-container');
-        // Se não passar URL (primeira carga), usa a padrão
         if (!url) url = "{% url 'admin_ferias_partial' %}";
         
         c.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-warning"></div></div>';
@@ -279,21 +277,19 @@
         }
         if(selEquipe && eq) selEquipe.value = eq;
 
-        // Persistência da Aba Ativa
         const activeTab = localStorage.getItem('activeAdminTab');
         if (activeTab) {
             const tabBtn = document.querySelector(`button[data-bs-target="${activeTab}"]`);
             if (tabBtn) {
                 new bootstrap.Tab(tabBtn).show();
                 if(activeTab === '#content-ponto') triggerPainelRH(window.currentRhMode);
-                if(activeTab === '#content-ferias') triggerPainelFerias(); // Carrega ferias se for a aba ativa
+                if(activeTab === '#content-ferias') triggerPainelFerias();
             }
         }
         document.querySelectorAll('button[data-bs-toggle="pill"]').forEach(btn => {
             btn.addEventListener('shown.bs.tab', function (e) {
                 const target = e.target.getAttribute('data-bs-target');
                 localStorage.setItem('activeAdminTab', target);
-                // Carrega o conteúdo ao clicar, se ainda não carregou
                 if(target === '#content-ferias') triggerPainelFerias();
             });
         });

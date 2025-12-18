@@ -121,3 +121,30 @@ body, html, .wrapper, .content-wrapper, .main-header, .main-footer {
 .navbar-nav .dropdown-menu .dropdown-item:last-child {
     border-bottom: none !important;
 }
+/* core/static/css/admin_theme.css */
+
+/* --- CORREÇÃO DO BUG DE CAMPO DUPLO (Jazzmin + Django Autocomplete) --- */
+
+/* Oculta o select original que o Select2 tenta esconder, mas o Jazzmin força a exibir */
+.select2-hidden-accessible {
+    border: 0 !important;
+    clip: rect(0 0 0 0) !important;
+    height: 1px !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    position: absolute !important;
+    width: 1px !important;
+    display: block !important; 
+}
+
+/* Ajusta a largura do campo de busca para não quebrar o layout */
+.select2-container {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+/* Opcional: Ajuste de z-index se o menu dropdown ficar atrás de algo */
+.select2-dropdown {
+    z-index: 9999 !important;
+}

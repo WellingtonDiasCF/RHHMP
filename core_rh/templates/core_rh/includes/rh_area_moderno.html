@@ -144,10 +144,7 @@
                             <td class="text-end pe-4">
                                 <div class="d-flex gap-2 justify-content-end align-items-center">
                                     
-                                    <a href="{% url 'folha_ponto' %}?funcionario_id={{ item.funcionario.id }}&mes={{ mes_atual }}&ano={{ ano_atual }}" 
-                                       target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill" title="Visualizar Espelho">
-                                       <i class="far fa-eye"></i>
-                                    </a>
+
                                     
                                     {% if item.arquivo_anexo %}
                                         <a href="{{ item.arquivo_anexo }}" download="{{ item.nome_download }}" 
