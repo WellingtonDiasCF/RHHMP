@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db.models.signals import post_save, m2m_changed
 from django.dispatch import receiver
 from django.contrib.auth.models import Group
+
 # 1. Tabela de Cargos
 class Cargo(models.Model):
     titulo = models.CharField("Nome do Cargo", max_length=100, unique=True)
@@ -222,3 +223,41 @@ class Ferias(models.Model):
 
     def __str__(self):
         return f"{self.funcionario.nome_completo} - {self.periodo_aquisitivo}"
+    
+
+ # 1. PRIMEIRO: Defina a função aqui
+def contracheque_upload_path(instance, filename):
+    # Usa matrícula se existir, senão usa o ID do funcionário para evitar erro
+    identificador = getattr(instance.funcionario, 'matricula', instance.funcionario.id)
+    return f'contracheques/{instance.ano}/{instance.mes}/{identificador}_{filename}'
+
+# 2. DEPOIS: Defina a classe que usa a função
+class Contracheque(models.Model):
+    MESES = [
+        (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
+        (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
+        (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro'),
+        (13, '13º Salário')
+    ]
+
+    funcionario = models.ForeignKey('Funcionario', on_delete=models.CASCADE, related_name='contracheques')
+    mes = models.IntegerField(choices=MESES)
+    ano = models.IntegerField()
+    
+    # Aqui a função é chamada, então ela já precisa ter sido lida pelo Python acima
+    arquivo = models.FileField(upload_to=contracheque_upload_path)
+    
+    data_upload = models.DateTimeField(auto_now_add=True)
+    data_ciencia = models.DateTimeField(null=True, blank=True, verbose_name="Data de Recebimento")
+    ip_ciencia = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-ano', '-mes']
+        unique_together = ['funcionario', 'mes', 'ano']
+
+    def __str__(self):
+        return f"{self.funcionario.nome_completo} - {self.get_mes_display()}/{self.ano}"
+
+    @property
+    def assinado(self):
+        return self.data_ciencia is not None

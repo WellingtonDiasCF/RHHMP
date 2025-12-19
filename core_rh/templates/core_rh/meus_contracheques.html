@@ -1,0 +1,271 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus Contracheques | Portal RH</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Inter', sans-serif;
+            color: #333;
+            min-height: 100vh;
+        }
+
+        /* Navbar (Mesmo padrão das outras páginas) */
+        .navbar-custom {
+            background: linear-gradient(to right, #1a1a1a, #333);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Layout Interno */
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .header-box {
+            background: #fff;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        /* Lista Lateral */
+        .list-group-item {
+            border: none;
+            border-bottom: 1px solid #f0f0f0;
+            transition: all 0.2s;
+            cursor: pointer;
+            border-radius: 8px !important;
+            margin-bottom: 5px;
+        }
+        
+        .list-group-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .list-group-item.active {
+            background-color: #FF6600; /* Laranja da marca */
+            border-color: #FF6600;
+            color: #fff !important;
+            box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3);
+        }
+
+        .list-group-item.active small, 
+        .list-group-item.active .text-muted {
+            color: rgba(255,255,255,0.8) !important;
+        }
+
+        /* Visualizador PDF */
+        .pdf-card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            overflow: hidden;
+            height: 100%;
+            min-height: 600px;
+        }
+
+        .pdf-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            background: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .pdf-frame {
+            width: 100%;
+            height: 650px;
+            border: none;
+            background: #525659; /* Cor de fundo do visualizador PDF nativo */
+        }
+        
+        /* Badges e Ícones */
+        .badge-status {
+            font-size: 0.75rem;
+            padding: 5px 10px;
+            border-radius: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">
+                <i class="fas fa-file-invoice-dollar me-2 text-warning"></i> Portal RH <span class="fw-light text-white-50">| Financeiro</span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-white small d-none d-md-block">Olá, {{ request.user.first_name }}</span>
+                <a href="{% url 'home' %}" class="btn btn-sm btn-outline-light rounded-pill px-3">
+                    <i class="fas fa-home me-1"></i> Início
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-container">
+
+        <div class="header-box">
+            <div>
+                <h3 class="fw-bold text-dark mb-1">Meus Contracheques</h3>
+                <p class="text-muted small mb-0">Histórico de pagamentos e comprovantes de recebimento.</p>
+            </div>
+            <a href="{% url 'home' %}" class="btn btn-outline-secondary rounded-pill px-4 fw-bold">
+                <i class="fas fa-arrow-left me-2"></i> Voltar
+            </a>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'success' %}success{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4" role="alert">
+                    <i class="fas fa-{% if message.tags == 'success' %}check-circle{% else %}exclamation-triangle{% endif %} me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="row g-4">
+            
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100" style="max-height: 800px; overflow-y: auto;">
+                    <div class="card-header bg-white p-3 fw-bold border-bottom">
+                        <i class="fas fa-calendar-alt me-2 text-muted"></i> Períodos Disponíveis
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="list-group list-group-flush" id="list-tab" role="tablist">
+                            {% for item in lista %}
+                            <a class="list-group-item list-group-item-action p-3 d-flex justify-content-between align-items-center {% if forloop.first %}active{% endif %}" 
+                               id="list-{{ item.id }}-list" 
+                               data-bs-toggle="list" 
+                               href="#list-{{ item.id }}" 
+                               role="tab">
+                                <div>
+                                    <strong class="d-block" style="font-size: 1.05rem;">{{ item.get_mes_display }} / {{ item.ano }}</strong>
+                                    <small class="text-muted opacity-75">Disponível em: {{ item.data_upload|date:"d/m/Y" }}</small>
+                                </div>
+                                
+                                <div class="text-end">
+                                    {% if item.assinado %}
+                                        <i class="fas fa-check-circle text-white fa-lg" title="Recebido"></i>
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle text-warning bg-white rounded-circle fa-lg shadow-sm" title="Pendente de Assinatura"></i>
+                                    {% endif %}
+                                </div>
+                            </a>
+                            {% empty %}
+                                <div class="text-center py-5 text-muted">
+                                    <i class="fas fa-folder-open fa-3x mb-3 opacity-25"></i>
+                                    <p>Nenhum contracheque encontrado.</p>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="tab-content h-100" id="nav-tabContent">
+                    {% for item in lista %}
+                    <div class="tab-pane fade {% if forloop.first %}show active{% endif %} h-100" id="list-{{ item.id }}" role="tabpanel">
+                        
+                        <div class="pdf-card">
+                            <div class="pdf-header">
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle bg-light p-2 me-3 text-primary">
+                                        <i class="fas fa-file-invoice fa-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="mb-0 fw-bold text-dark">Holerite: {{ item.get_mes_display }}/{{ item.ano }}</h5>
+                                        {% if item.assinado %}
+                                            <span class="badge bg-success-subtle text-success border border-success rounded-pill px-2">
+                                                <i class="fas fa-check-double me-1"></i> Recebido em {{ item.data_ciencia|date:"d/m/Y H:i" }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-warning-subtle text-warning border border-warning rounded-pill px-2">
+                                                <i class="fas fa-clock me-1"></i> Aguardando Confirmação
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    {% if not item.assinado %}
+                                        <button type="button" class="btn btn-warning text-white fw-bold rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#confirmModal{{ item.id }}">
+                                            <i class="fas fa-pen-nib me-2"></i> Confirmar Recebimento
+                                        </button>
+                                    {% else %}
+                                        <a href="{{ item.arquivo.url }}" download class="btn btn-outline-primary rounded-pill px-4 fw-bold">
+                                            <i class="fas fa-download me-2"></i> Baixar PDF
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <iframe src="{{ item.arquivo.url }}" class="pdf-frame"></iframe>
+                        </div>
+
+                        {% if not item.assinado %}
+                        <div class="modal fade" id="confirmModal{{ item.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg rounded-4">
+                                    <div class="modal-header border-0 pb-0">
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body text-center p-4">
+                                        <div class="mb-3 text-warning">
+                                            <i class="fas fa-file-signature fa-4x"></i>
+                                        </div>
+                                        <h4 class="fw-bold mb-3">Confirmar Recebimento?</h4>
+                                        <p class="text-muted mb-4">
+                                            Eu, <strong>{{ request.user.first_name }} {{ request.user.last_name }}</strong>, declaro ter recebido e conferido o contracheque referente a <strong>{{ item.get_mes_display }}/{{ item.ano }}</strong>.
+                                        </p>
+                                        
+                                        <form action="{% url 'assinar_contracheque_local' item.id %}" method="POST">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-success w-100 rounded-pill py-3 fw-bold shadow-sm">
+                                                <i class="fas fa-check-circle me-2"></i> Sim, Confirmar Agora
+                                            </button>
+                                        </form>
+                                        
+                                        <button type="button" class="btn btn-link text-muted mt-2 text-decoration-none" data-bs-dismiss="modal">Cancelar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                    </div>
+                    {% empty %}
+                        <div class="h-100 d-flex align-items-center justify-content-center text-muted">
+                            Selecione um item ao lado.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

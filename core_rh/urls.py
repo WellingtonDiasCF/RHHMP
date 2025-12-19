@@ -44,4 +44,6 @@ urlpatterns = [
     path('password_reset/done/', views.CustomPasswordResetDoneView.as_view(), name='password_reset_done'),
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
+    path('meus-contracheques/', views.meus_contracheques, name='meus_contracheques'),
+    path('assinar-contracheque/<int:pk>/', views.assinar_contracheque_local, name='assinar_contracheque_local'),
 ]

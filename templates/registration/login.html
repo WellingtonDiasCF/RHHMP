@@ -73,13 +73,16 @@
 
         .forgot-link {
             color: #64748b;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             text-decoration: none;
             transition: color 0.2s;
+            margin-top: 5px;
+            display: inline-block;
         }
 
         .forgot-link:hover {
             color: #FF6600;
+            text-decoration: underline;
         }
 
         .input-group-text {
@@ -117,13 +120,14 @@
             </div>
 
             <div class="mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label fw-bold text-secondary small text-uppercase mb-0">Senha</label>
-                    <a href="{% url 'password_reset' %}" class="forgot-link small">Esqueceu a senha?</a>
-                </div>
+                <label class="form-label fw-bold text-secondary small text-uppercase mb-0">Senha</label>
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
                     {{ form.password }}
+                </div>
+                
+                <div class="text-end">
+                    <a href="{% url 'password_reset' %}" class="forgot-link">Esqueceu a senha?</a>
                 </div>
             </div>
 

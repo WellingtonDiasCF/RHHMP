@@ -5,7 +5,7 @@ from django.utils.html import format_html
 from django import forms
 from django.urls import reverse
 from django.shortcuts import redirect # Necessário para o botão PDF
-from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias
+from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias, Contracheque
 
 # --- FORMULÁRIO PERSONALIZADO ---
 class FuncionarioAdminForm(forms.ModelForm):
@@ -187,3 +187,13 @@ try:
     admin.site.unregister(Group)
 except admin.sites.NotRegistered:
     pass
+
+@admin.register(Contracheque)
+class ContrachequeAdmin(admin.ModelAdmin):
+    list_display = ('funcionario', 'mes', 'ano', 'status_assinatura', 'data_ciencia')
+    list_filter = ('ano', 'mes', 'data_ciencia')
+    search_fields = ('funcionario__nome_completo', 'funcionario__cpf')
+    
+    def status_assinatura(self, obj):
+        return "✅ Assinado" if obj.data_ciencia else "⏳ Pendente"
+    status_assinatura.short_description = "Status"

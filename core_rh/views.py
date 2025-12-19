@@ -16,7 +16,7 @@ from datetime import date, time, datetime, timedelta
 from calendar import monthrange 
 from django.template.loader import render_to_string 
 from django.conf import settings
-from .models import RegistroPonto, Funcionario, Equipe
+from .models import RegistroPonto, Funcionario, Equipe, Contracheque, Ferias
 from django.contrib import messages
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import update_session_auth_hash
@@ -1308,3 +1308,38 @@ def admin_ferias_partial_view(request):
     context['nome_mes'] = f"{meses.get(data_base.month)} {data_base.year}"
 
     return render(request, 'core_rh/includes/rh_ferias_moderno.html', context)
+
+@login_required
+def meus_contracheques(request):
+    try:
+        funcionario = request.user.funcionario
+        # Pega todos os contracheques desse funcionário
+        lista = Contracheque.objects.filter(funcionario=funcionario).order_by('-ano', '-mes')
+    except AttributeError:
+        lista = []
+        messages.error(request, "Seu usuário não está vinculado a um funcionário.")
+
+    return render(request, 'core_rh/meus_contracheques.html', {'lista': lista})
+
+@login_required
+def assinar_contracheque_local(request, pk):
+    if request.method == "POST":
+        contracheque = get_object_or_404(Contracheque, pk=pk, funcionario__usuario=request.user)
+        
+        if not contracheque.data_ciencia:
+            # AQUI ACONTECE A "ASSINATURA"
+            contracheque.data_ciencia = timezone.now()
+            
+            # Pega o IP para auditoria (segurança simples)
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(',')[0]
+            else:
+                ip = request.META.get('REMOTE_ADDR')
+            contracheque.ip_ciencia = ip
+            
+            contracheque.save()
+            messages.success(request, f"Recebimento do contracheque {contracheque.get_mes_display()}/{contracheque.ano} confirmado com sucesso!")
+        
+        return redirect('meus_contracheques')
+    return redirect('home')
