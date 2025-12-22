@@ -161,14 +161,14 @@
                                role="tab">
                                 <div>
                                     <strong class="d-block" style="font-size: 1.05rem;">{{ item.get_mes_display }} / {{ item.ano }}</strong>
-                                    <small class="text-muted opacity-75">Disponível em: {{ item.data_upload|date:"d/m/Y" }}</small>
+                                    <small class="text-muted opacity-75">Ref: {{ item.get_mes_display }}/{{ item.ano }}</small>
                                 </div>
                                 
                                 <div class="text-end">
-                                    {% if item.assinado %}
-                                        <i class="fas fa-check-circle text-white fa-lg" title="Recebido"></i>
+                                    {% if item.data_ciencia %}
+                                        <i class="fas fa-check-circle text-white fa-lg" title="Assinado Digitalmente"></i>
                                     {% else %}
-                                        <i class="fas fa-exclamation-circle text-warning bg-white rounded-circle fa-lg shadow-sm" title="Pendente de Assinatura"></i>
+                                        <i class="fas fa-pen-nib text-warning bg-white rounded-circle fa-lg shadow-sm" title="Aguardando Assinatura"></i>
                                     {% endif %}
                                 </div>
                             </a>
@@ -196,22 +196,22 @@
                                     </div>
                                     <div>
                                         <h5 class="mb-0 fw-bold text-dark">Holerite: {{ item.get_mes_display }}/{{ item.ano }}</h5>
-                                        {% if item.assinado %}
+                                        {% if item.data_ciencia %}
                                             <span class="badge bg-success-subtle text-success border border-success rounded-pill px-2">
-                                                <i class="fas fa-check-double me-1"></i> Recebido em {{ item.data_ciencia|date:"d/m/Y H:i" }}
+                                                <i class="fas fa-file-signature me-1"></i> Assinado em {{ item.data_ciencia|date:"d/m/Y H:i" }}
                                             </span>
                                         {% else %}
                                             <span class="badge bg-warning-subtle text-warning border border-warning rounded-pill px-2">
-                                                <i class="fas fa-clock me-1"></i> Aguardando Confirmação
+                                                <i class="fas fa-pen-nib me-1"></i> Aguardando Assinatura
                                             </span>
                                         {% endif %}
                                     </div>
                                 </div>
 
                                 <div>
-                                    {% if not item.assinado %}
-                                        <button type="button" class="btn btn-warning text-white fw-bold rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#confirmModal{{ item.id }}">
-                                            <i class="fas fa-pen-nib me-2"></i> Confirmar Recebimento
+                                    {% if not item.data_ciencia %}
+                                        <button type="button" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#confirmModal{{ item.id }}">
+                                            <i class="fas fa-file-signature me-2"></i> Assinar Digitalmente
                                         </button>
                                     {% else %}
                                         <a href="{{ item.arquivo.url }}" download class="btn btn-outline-primary rounded-pill px-4 fw-bold">
@@ -224,7 +224,7 @@
                             <iframe src="{{ item.arquivo.url }}" class="pdf-frame"></iframe>
                         </div>
 
-                        {% if not item.assinado %}
+                        {% if not item.data_ciencia %}
                         <div class="modal fade" id="confirmModal{{ item.id }}" tabindex="-1" aria-hidden="true">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content border-0 shadow-lg rounded-4">
@@ -235,15 +235,17 @@
                                         <div class="mb-3 text-warning">
                                             <i class="fas fa-file-signature fa-4x"></i>
                                         </div>
-                                        <h4 class="fw-bold mb-3">Confirmar Recebimento?</h4>
+                                        <h4 class="fw-bold mb-3">Assinatura Digital</h4>
                                         <p class="text-muted mb-4">
-                                            Eu, <strong>{{ request.user.first_name }} {{ request.user.last_name }}</strong>, declaro ter recebido e conferido o contracheque referente a <strong>{{ item.get_mes_display }}/{{ item.ano }}</strong>.
+                                            Eu, <strong>{{ request.user.first_name }} {{ request.user.last_name }}</strong>, declaro ter recebido o contracheque referente a <strong>{{ item.get_mes_display }}/{{ item.ano }}</strong>.
+                                            <br><br>
+                                            <span class="small text-danger fw-bold"><i class="fas fa-info-circle me-1"></i> Ao confirmar, seu nome será inserido no documento PDF como assinatura oficial.</span>
                                         </p>
                                         
                                         <form action="{% url 'assinar_contracheque_local' item.id %}" method="POST">
                                             {% csrf_token %}
                                             <button type="submit" class="btn btn-success w-100 rounded-pill py-3 fw-bold shadow-sm">
-                                                <i class="fas fa-check-circle me-2"></i> Sim, Confirmar Agora
+                                                <i class="fas fa-pen-fancy me-2"></i> Assinar e Confirmar
                                             </button>
                                         </form>
                                         

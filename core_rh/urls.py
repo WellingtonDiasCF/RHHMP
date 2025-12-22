@@ -28,12 +28,9 @@ urlpatterns = [
     path('api/admin/ferias-partial/', views.admin_ferias_partial_view, name='admin_ferias_partial'),
     path('api/admin/contracheque/partial/', views.admin_contracheque_partial, name='admin_contracheque_partial'),
 
-
     # --- MÓDULO DE FÉRIAS ---
     path('minhas-ferias/', views.minhas_ferias_view, name='minhas_ferias'),
     path('minhas-ferias/upload/<int:ferias_id>/', views.upload_ferias_view, name='upload_ferias'),
-    
-    # [CORREÇÃO] Esta rota estava faltando e causava o erro 500
     path('ferias/gerar-aviso/<int:ferias_id>/', views.gerar_aviso_ferias_pdf, name='gerar_aviso_ferias_pdf'),
     
     # --- AUTENTICAÇÃO E SENHAS ---
@@ -46,12 +43,15 @@ urlpatterns = [
     path('password_reset/done/', views.CustomPasswordResetDoneView.as_view(), name='password_reset_done'),
     path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('reset/done/', auth_views.PasswordResetCompleteView.as_view(), name='password_reset_complete'),
+
+    # --- CONTRACHEQUES (FUNCIONÁRIO) ---
     path('meus-contracheques/', views.meus_contracheques, name='meus_contracheques'),
     path('assinar-contracheque/<int:pk>/', views.assinar_contracheque_local, name='assinar_contracheque_local'),
-
-path('meus-contracheques/', views.meus_contracheques, name='meus_contracheques'),
-    path('assinar-contracheque/<int:pk>/', views.assinar_contracheque_local, name='assinar_contracheque_local'),
     
-    # ADICIONE ESTA LINHA (Ela resolve o erro NoReverseMatch):
+    # --- GESTÃO DE CONTRACHEQUES (RH) ---
     path('gestao-contracheques/', views.gerenciar_contracheques, name='gerenciar_contracheques'),
+    
+    # NOVAS ROTAS ADICIONADAS PARA OS BOTÕES DE AÇÃO:
+    path('rh/contracheque/upload/<int:func_id>/', views.upload_individual_contracheque, name='upload_individual_contracheque'),
+    path('rh/contracheque/excluir/<int:cc_id>/', views.excluir_contracheque, name='excluir_contracheque'),
 ]

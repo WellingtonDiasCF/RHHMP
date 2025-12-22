@@ -7,13 +7,11 @@
     {% if cl.opts.model_name == 'funcionario' or cl.opts.model_name == 'equipe' %}
     <div class="d-flex justify-content-center mb-5">
         <ul class="nav nav-pills custom-nav p-1 bg-white border shadow-sm rounded-pill">
-            
             <li class="nav-item">
                 <button class="nav-link active rounded-pill px-4 fw-bold" id="tab-admin" data-bs-toggle="pill" data-bs-target="#content-admin" type="button">
                     <i class="fas fa-database me-2"></i> Administração
                 </button>
             </li>
-
             <li class="nav-item">
                 {% if cl.opts.model_name == 'equipe' %}
                     <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-ponto" type="button" onclick="setRhMode('summary'); triggerPainelRH('summary')">
@@ -25,16 +23,12 @@
                     </button>
                 {% endif %}
             </li>
-
             {% if cl.opts.model_name == 'funcionario' %}
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-contracheque" type="button" onclick="triggerPainelContracheque()">
                     <i class="fas fa-file-invoice-dollar me-2"></i> Contracheque
                 </button>
             </li>
-            {% endif %}
-
-            {% if cl.opts.model_name == 'funcionario' %}
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-ferias" type="button" onclick="triggerPainelFerias()">
                     <i class="fas fa-umbrella-beach me-2"></i> Férias
@@ -46,9 +40,7 @@
     {% endif %}
 
     <div class="tab-content">
-        
         <div class="tab-pane fade show active" id="content-admin">
-            
             <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-4 shadow-sm border border-light flex-wrap gap-3">
                 <div class="d-flex align-items-center gap-2 flex-grow-1">
                     <div class="search-wrapper" style="min-width: 300px; max-width: 450px; flex-grow: 1;">
@@ -150,34 +142,16 @@
         </div>
 
         <div class="tab-pane fade" id="content-ponto"><div id="rh-panel-container"></div></div>
-
         <div class="tab-pane fade" id="content-contracheque"><div id="rh-contracheque-container"></div></div>
-        
         <div class="tab-pane fade" id="content-ferias"><div id="rh-ferias-container"></div></div>
     </div>
 </div>
 
 <style>
-    /* --- CSS REFORÇADO PARA AS ABAS --- */
-    .custom-nav .nav-link { 
-        color: #555 !important; /* Cor padrão do texto (Cinza Escuro) */
-        transition: all 0.3s; 
-        background: transparent;
-    }
-    
-    .custom-nav .nav-link:hover {
-        background-color: #f8f9fa;
-        color: #333 !important;
-    }
-
-    /* Estado ATIVO (Laranja com texto Branco) */
-    .custom-nav .nav-link.active { 
-        background-color: #FF6600 !important; 
-        color: white !important; 
-        box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3);
-    }
-
-    /* Outros Estilos */
+    /* MANTIDO SEU ESTILO ORIGINAL */
+    .custom-nav .nav-link { color: #555 !important; transition: all 0.3s; background: transparent; }
+    .custom-nav .nav-link:hover { background-color: #f8f9fa; color: #333 !important; }
+    .custom-nav .nav-link.active { background-color: #FF6600 !important; color: white !important; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3); }
     .table-footer-clean, .paginator-wrapper, .paginator { font-size: 0 !important; line-height: 0; color: transparent; }
     .paginator a, .paginator span.this-page { font-size: 0.85rem !important; line-height: normal; color: #333 !important; display: inline-block; padding: 6px 12px; border-radius: 6px; margin-left: 5px; text-decoration: none; font-weight: bold; background: white; border: 1px solid #ddd; }
     .paginator a:hover { border-color: #FF6600; color: #FF6600 !important; }
@@ -194,6 +168,26 @@
 </style>
 
 <script>
+    // --- FUNÇÕES DE NAVEGAÇÃO E MODAIS ---
+    
+    // [NOVO] Função para abrir o modal de Upload Individual (MOVIDA PARA CÁ PARA FUNCIONAR)
+    window.abrirModalIndividual = function(nome, urlAction) {
+        // Encontra o Modal que foi carregado via AJAX
+        var modalEl = document.getElementById('modalUploadIndividual');
+        if(!modalEl) {
+            console.error("Modal não encontrado no DOM.");
+            return;
+        }
+
+        // Preenche os dados
+        document.getElementById('indiv_nome_func').textContent = nome;
+        document.getElementById('formIndividual').action = urlAction;
+        
+        // Abre usando Bootstrap
+        var myModal = new bootstrap.Modal(modalEl);
+        myModal.show();
+    }
+
     // --- LÓGICA DO PAINEL DE PONTO (ABA 2) ---
     window.currentRhMode = "{% if cl.opts.model_name == 'equipe' %}summary{% else %}list{% endif %}";
     function setRhMode(mode) { window.currentRhMode = mode; }
@@ -253,12 +247,11 @@
     }
     window.triggerPainelFerias = carregarPainelFerias;
 
-    // --- LÓGICA DO PAINEL DE CONTRACHEQUE (ABA 3 - NOVA) ---
+    // --- LÓGICA DO PAINEL DE CONTRACHEQUE (ABA 3) ---
     window.filtrarAdminContracheque = function(mes, ano) {
         const elSearch = document.getElementById('contracheque-search-input');
         const query = elSearch ? elSearch.value : '';
 
-        // URL da view parcial
         let url = `{% url 'admin_contracheque_partial' %}?mes=${mes}&ano=${ano}`;
         if(query) url += `&q=${encodeURIComponent(query)}`;
 
@@ -274,7 +267,7 @@
     }
     window.triggerPainelContracheque = carregarPainelContracheque;
 
-    // --- LÓGICA DA ABA ADMINISTRAÇÃO (ABA 1) ---
+    // --- LÓGICA DA ABA ADMINISTRAÇÃO ---
     const MAPA_EQUIPES = {{ json_mapa_equipes|default:"{}"|safe }};
 
     function atualizarFiltroAdmin() {

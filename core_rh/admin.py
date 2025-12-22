@@ -8,7 +8,11 @@ from django.urls import reverse, path
 from django.shortcuts import redirect, render
 from django.contrib import messages
 from django.core.files.base import ContentFile
-
+import pdfplumber  # <--- NOVA BIBLIOTECA
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from django.core.files.base import ContentFile
+from django.contrib import messages
 from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias, Contracheque
 from .forms import UploadLoteContrachequeForm
 
@@ -242,37 +246,20 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
 
 @admin.register(Contracheque)
 class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
-    # Lista moderna via abas no Funcionario, aqui mantemos o básico
     list_display = ('funcionario', 'referencia', 'status_envio', 'status_assinatura', 'data_ciencia', 'link_arquivo')
     list_filter = ('ano', 'mes', 'data_ciencia')
     search_fields = ('funcionario__nome_completo', 'funcionario__matricula')
     
-    def referencia(self, obj):
-        return f"{obj.get_mes_display()}/{obj.ano}"
-    referencia.short_description = "Competência"
-
-    def status_envio(self, obj):
-        return format_html('<span style="color: green;"><i class="fas fa-check-circle"></i> Enviado</span>')
-    status_envio.short_description = "Envio RH"
-
+    def referencia(self, obj): return f"{obj.get_mes_display()}/{obj.ano}"
+    def status_envio(self, obj): return format_html('<span style="color: green;"><i class="fas fa-check-circle"></i> Enviado</span>')
     def status_assinatura(self, obj):
-        if obj.data_ciencia:
-            return format_html('<span style="color: green; font-weight: bold;"><i class="fas fa-file-signature"></i> Assinado</span>')
-        return format_html('<span style="color: orange;"><i class="fas fa-clock"></i> Pendente</span>')
-    status_assinatura.short_description = "Status Funcionário"
-
+        return format_html('<span style="color: green; font-weight: bold;"><i class="fas fa-file-signature"></i> Assinado</span>') if obj.data_ciencia else format_html('<span style="color: orange;"><i class="fas fa-clock"></i> Pendente</span>')
     def link_arquivo(self, obj):
-        if obj.arquivo:
-            return format_html('<a href="{}" target="_blank" class="button" style="padding:5px 10px;">Ver PDF</a>', obj.arquivo.url)
-        return "-"
-    link_arquivo.short_description = "Documento"
+        return format_html('<a href="{}" target="_blank" class="button" style="padding:5px 10px;">Ver PDF</a>', obj.arquivo.url) if obj.arquivo else "-"
 
-    # --- FUNCIONALIDADE DE UPLOAD EM LOTE ---
     def get_urls(self):
         urls = super().get_urls()
-        my_urls = [
-            path('importar-lote/', self.admin_site.admin_view(self.importar_lote_view), name='importar_contracheques'),
-        ]
+        my_urls = [path('importar-lote/', self.admin_site.admin_view(self.importar_lote_view), name='importar_contracheques')]
         return my_urls + urls
 
     def importar_lote_view(self, request):
@@ -282,80 +269,140 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
                 arquivo_geral = request.FILES['arquivo']
                 mes = int(form.cleaned_data['mes'])
                 ano = int(form.cleaned_data['ano'])
-                
+                data_recebimento = form.cleaned_data['data_recebimento']
                 try:
-                    self.processar_pdf(arquivo_geral, mes, ano, request)
+                    self.processar_pdf(arquivo_geral, mes, ano, data_recebimento, request)
                     return redirect('admin:core_rh_contracheque_changelist')
                 except Exception as e:
                     messages.error(request, f"Erro ao processar PDF: {str(e)}")
         else:
             form = UploadLoteContrachequeForm()
 
-        context = {
-            'form': form,
-            'title': 'Importar Contracheques em Lote (Split PDF)',
-            'site_header': self.admin_site.site_header,
-            'site_title': self.admin_site.site_title,
-            'index_title': self.admin_site.index_title,
-            'has_permission': True,
-        }
-        return render(request, 'admin/importar_contracheques.html', context)
+        return render(request, 'admin/importar_contracheques.html', {'form': form, 'title': 'Importar Contracheques', 'site_header': self.admin_site.site_header})
 
-    def processar_pdf(self, arquivo, mes, ano, request):
-        if not PdfReader:
-            raise ImportError("Biblioteca pypdf não está instalada.")
-            
-        reader = PdfReader(arquivo)
-        funcionarios = Funcionario.objects.all()
+    def processar_pdf(self, arquivo, mes, ano, data_recebimento, request):
+        if not PdfReader: raise ImportError("Instale pypdf")
+        if not canvas: raise ImportError("Instale reportlab")
         
+        # LOG NO TERMINAL
+        print(">>> INICIANDO PROCESSAMENTO DE PDF <<<")
+        print(f"Data recebida: {data_recebimento}")
+
+        arquivo.seek(0)
+        plumber_pdf = pdfplumber.open(arquivo)
+        
+        arquivo.seek(0)
+        reader = PdfReader(arquivo)
+        
+        funcionarios = Funcionario.objects.all()
         count_sucesso = 0
         nao_encontrados = []
+        
+        # Variáveis de Log para mostrar na tela depois
+        logs_detalhados = []
 
         for page_num, page in enumerate(reader.pages):
-            texto_pagina = page.extract_text()
-            if not texto_pagina: 
-                texto_pagina = ""
-            texto_pagina = texto_pagina.upper()
+            texto_pagina = page.extract_text() or ""
+            texto_pagina_upper = texto_pagina.upper()
             
             funcionario_encontrado = None
-
             for func in funcionarios:
                 nome_upper = func.nome_completo.upper().strip()
-                if nome_upper and nome_upper in texto_pagina:
+                if nome_upper and nome_upper in texto_pagina_upper:
                     funcionario_encontrado = func
                     break
             
             if funcionario_encontrado:
+                print(f"--- Página {page_num+1}: Funcionário {funcionario_encontrado.nome_completo} encontrado ---")
                 writer = PdfWriter()
+                
+                overlay_pdf = None
+                if data_recebimento:
+                    # Coordenadas Padrão (Fallback)
+                    pos_x = 130
+                    pos_y = 55
+                    metodo_usado = "FIXO (Padrão)"
+
+                    try:
+                        p_page = plumber_pdf.pages[page_num]
+                        # Tenta várias variações do texto para garantir
+                        palavras = p_page.search("DATA DO RECEBIMENTO") or \
+                                   p_page.search("DATA RECEBIMENTO") or \
+                                   p_page.search("RECEBIMENTO")
+                        
+                        if palavras:
+                            target = palavras[0]
+                            altura_pagina = float(page.mediabox.height)
+                            
+                            # Cálculo
+                            pos_x = target['x0'] + 15
+                            pos_y = altura_pagina - target['top'] + 12
+                            metodo_usado = "DINÂMICO (Texto Encontrado)"
+                            print(f"   [SUCESSO] Texto achado! X={pos_x}, Y={pos_y}")
+                        else:
+                            print(f"   [AVISO] Texto 'DATA DO RECEBIMENTO' NÃO encontrado. Usando coordenadas fixas.")
+                            logs_detalhados.append(f"Pág {page_num+1}: Texto da data não achado. Usado posição fixa.")
+
+                    except Exception as e:
+                        print(f"   [ERRO] Falha no cálculo dinâmico: {e}")
+                        logs_detalhados.append(f"Pág {page_num+1}: Erro no cálculo ({e})")
+
+                    # CRIAÇÃO DO CARIMBO
+                    try:
+                        packet = io.BytesIO()
+                        can = canvas.Canvas(packet, pagesize=A4)
+                        can.setFont("Helvetica", 10)
+                        
+                        data_str = data_recebimento.strftime("%d/%m/%Y")
+                        # Desenha a data
+                        can.drawString(pos_x, pos_y, data_str)
+                        
+                        # DEBUG VISUAL: Desenha um ponto vermelho onde ele acha que deve escrever
+                        # (Remova isso depois se ficar feio, mas ajuda a achar a data)
+                        can.setFillColorRGB(1, 0, 0) # Vermelho
+                        can.circle(pos_x, pos_y, 2, fill=1) 
+                        
+                        can.save()
+
+                        packet.seek(0)
+                        overlay_pdf = PdfReader(packet)
+                        page.merge_page(overlay_pdf.pages[0])
+                        print(f"   [OK] Data {data_str} escrita em X={pos_x:.1f}, Y={pos_y:.1f} ({metodo_usado})")
+                    except Exception as e:
+                        print(f"   [ERRO CRÍTICO] Falha ao desenhar/mesclar PDF: {e}")
+
                 writer.add_page(page)
                 
+                # Salva o PDF final
                 pdf_bytes = io.BytesIO()
                 writer.write(pdf_bytes)
                 pdf_content = ContentFile(pdf_bytes.getvalue())
                 
-                filename = f"contracheque_{funcionario_encontrado.id}_{mes}_{ano}.pdf"
+                defaults = {'arquivo': None}
+                if data_recebimento: defaults['data_ciencia'] = data_recebimento
 
-                Contracheque.objects.update_or_create(
-                    funcionario=funcionario_encontrado,
-                    mes=mes,
-                    ano=ano,
-                    defaults={'arquivo': None}
+                cc, created = Contracheque.objects.update_or_create(
+                    funcionario=funcionario_encontrado, mes=mes, ano=ano,
+                    defaults=defaults
                 )
-                
-                cc = Contracheque.objects.get(funcionario=funcionario_encontrado, mes=mes, ano=ano)
-                cc.arquivo.save(filename, pdf_content, save=True)
-                
+                if not created and data_recebimento:
+                    cc.data_ciencia = data_recebimento
+                    cc.save()
+
+                cc.arquivo.save(f"holerite_{funcionario_encontrado.id}.pdf", pdf_content)
                 count_sucesso += 1
             else:
-                nao_encontrados.append(f"Página {page_num + 1}")
-
-        messages.success(request, f"{count_sucesso} contracheques processados e enviados com sucesso!")
-        if nao_encontrados:
-            messages.warning(request, f"Atenção: Não foi possível identificar o funcionário nas páginas: {', '.join(nao_encontrados)}")
-
-# Remove User/Group do admin padrão se já não estiverem removidos
-try:
-    admin.site.unregister(User)
-    admin.site.unregister(Group)
-except admin.sites.NotRegistered:
-    pass
+                print(f"--- Página {page_num+1}: NENHUM funcionário identificado ---")
+                nao_encontrados.append(f"Pág {page_num + 1}")
+        
+        plumber_pdf.close()
+        
+        # Feedback para o usuário na tela
+        messages.success(request, f"{count_sucesso} processados.")
+        if logs_detalhados:
+            # Mostra na tela avisos sobre a data
+            msg_log = " | ".join(logs_detalhados[:3]) # Mostra só os 3 primeiros erros pra não poluir
+            messages.warning(request, f"Atenção nas datas: {msg_log}")
+            
+        if nao_encontrados: 
+            messages.warning(request, f"Páginas ignoradas (sem nome): {', '.join(nao_encontrados)}")

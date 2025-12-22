@@ -22,9 +22,11 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.urls import reverse
-
-
-
+import pdfplumber
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from django.core.files.base import ContentFile
+from reportlab.lib import colors  # <--- ESSE ERA O QUE FALTAVA
 
 try:
     from weasyprint import HTML
@@ -1326,22 +1328,145 @@ def assinar_contracheque_local(request, pk):
         contracheque = get_object_or_404(Contracheque, pk=pk, funcionario__usuario=request.user)
         
         if not contracheque.data_ciencia:
-            # AQUI ACONTECE A "ASSINATURA"
-            contracheque.data_ciencia = timezone.now()
-            
-            # Pega o IP para auditoria (segurança simples)
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip = x_forwarded_for.split(',')[0]
-            else:
-                ip = request.META.get('REMOTE_ADDR')
-            contracheque.ip_ciencia = ip
-            
-            contracheque.save()
-            messages.success(request, f"Recebimento do contracheque {contracheque.get_mes_display()}/{contracheque.ano} confirmado com sucesso!")
+            try:
+                funcionario = contracheque.funcionario
+                nome_assinatura = funcionario.nome_completo.strip().upper()
+                
+                # Abre o arquivo
+                pdf_io = io.BytesIO(contracheque.arquivo.read())
+                
+                # Plumber para análise geométrica
+                plumber_pdf = pdfplumber.open(pdf_io)
+                pdf_io.seek(0)
+                reader = PdfReader(pdf_io)
+                writer = PdfWriter()
+                
+                for i, page in enumerate(reader.pages):
+                    try:
+                        p_page = plumber_pdf.pages[i]
+                        altura_pagina = float(page.mediabox.height)
+                        
+                        # 1. Encontrar a âncora de Texto ("ASSINATURA")
+                        palavras = p_page.search("ASSINATURA") or \
+                                   p_page.search("EMPREGADO")
+                        
+                        # Valores padrão iniciais (caso seja imagem escaneada sem linhas vetoriais)
+                        pos_x = 400
+                        pos_y_base = 50
+                        largura_final = 250
+                        
+                        if palavras:
+                            target = palavras[-1] # Pega a última ocorrência (rodapé)
+                            centro_texto = (target['x0'] + target['x1']) / 2
+                            
+                            # --- 2. DETECÇÃO CIRÚRGICA DA LINHA ---
+                            linha_exata = None
+                            
+                            # Define uma "zona de caça" restrita:
+                            # A linha tem que estar ACIMA do texto, mas MUITO PERTO (máx 25pts / ~8mm)
+                            # Se procurar muito alto, pega a tabela de valores (erro anterior)
+                            limite_busca_inferior = target['top'] - 25 
+                            limite_busca_superior = target['top'] 
+                            
+                            # Varre todas as linhas desenhadas na página
+                            for linha in p_page.lines:
+                                # Filtra apenas linhas horizontais (top == bottom)
+                                if abs(linha['top'] - linha['bottom']) < 2:
+                                    
+                                    # Verifica se a linha está na "zona de caça" vertical
+                                    if limite_busca_inferior < linha['bottom'] < limite_busca_superior:
+                                        
+                                        # Verifica se a linha está alinhada com o texto (passa por cima dele)
+                                        # O centro do texto deve estar contido na largura da linha
+                                        if linha['x0'] < centro_texto < linha['x1']:
+                                            linha_exata = linha
+                                            break # Achamos a linha da assinatura!
+                            
+                            if linha_exata:
+                                # [SUCESSO] Usa as dimensões reais da linha encontrada
+                                pos_x = linha_exata['x0']
+                                largura_final = linha_exata['x1'] - linha_exata['x0']
+                                
+                                # Converte Y do Plumber (topo) para ReportLab (fundo)
+                                pos_y_base = altura_pagina - linha_exata['bottom']
+                                
+                                print(f"Linha vetorial detectada! Largura: {largura_final}")
+                            else:
+                                # [FALLBACK] Se não achou linha (ex: PDF imagem), calcula uma largura dinâmica
+                                # baseada no tamanho da palavra "ASSINATURA"
+                                largura_texto = target['x1'] - target['x0']
+                                largura_final = largura_texto * 3 # Estipula 3x o tamanho da palavra
+                                if largura_final < 200: largura_final = 200 # Mínimo seguro
+                                
+                                pos_x = centro_texto - (largura_final / 2)
+                                pos_y_base = altura_pagina - target['bottom']
+
+                        # --- 3. DESENHO (WHITEOUT + NOME) ---
+                        packet = io.BytesIO()
+                        can = canvas.Canvas(packet, pagesize=A4)
+                        
+                        # Ajustes da área de limpeza
+                        rect_h = 32 # Altura compacta
+                        rect_y = pos_y_base - 2 # Desce um pouco para cobrir descenders
+                        
+                        # A. Apagar Linha Antiga (Retângulo Branco)
+                        can.setFillColor(colors.white)
+                        can.rect(pos_x, rect_y, largura_final, rect_h, stroke=0, fill=1)
+                        
+                        # B. Escrever Nome (Ajuste automático de fonte)
+                        font_size = 10
+                        nome_width = can.stringWidth(nome_assinatura, "Helvetica-Bold", font_size)
+                        
+                        # Se o nome for maior que a linha, reduz a fonte para caber
+                        if nome_width > largura_final:
+                            font_size = font_size * (largura_final / nome_width) * 0.95
+                        
+                        can.setFillColor(colors.black)
+                        can.setFont("Helvetica-Bold", font_size)
+                        
+                        # Centraliza o nome na largura detectada
+                        centro_area = pos_x + (largura_final / 2)
+                        can.drawCentredString(centro_area, rect_y + 12, nome_assinatura)
+                        
+                        # C. Desenhar Linha Nova (Exatamente em cima da antiga)
+                        can.setLineWidth(0.5)
+                        y_linha = rect_y + 10
+                        can.line(pos_x, y_linha, pos_x + largura_final, y_linha)
+                        
+                        # D. Reescrever "ASSINATURA"
+                        can.setFont("Helvetica", 6)
+                        can.drawCentredString(centro_area, rect_y + 2, "ASSINATURA")
+                        
+                        can.save()
+                        packet.seek(0)
+                        overlay = PdfReader(packet)
+                        page.merge_page(overlay.pages[0])
+                        
+                    except Exception as e:
+                        print(f"Erro processando página {i}: {e}")
+                    
+                    writer.add_page(page)
+                
+                plumber_pdf.close()
+                
+                # Salva PDF Final
+                pdf_output = io.BytesIO()
+                writer.write(pdf_output)
+                
+                filename = f"holerite_{funcionario.id}_{contracheque.mes}_{contracheque.ano}_assinado.pdf"
+                contracheque.arquivo.save(filename, ContentFile(pdf_output.getvalue()), save=False)
+                
+                contracheque.data_ciencia = timezone.now()
+                ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR')).split(',')[0]
+                contracheque.ip_ciencia = ip
+                contracheque.save()
+                
+                messages.success(request, "Assinado com sucesso!")
+                
+            except Exception as e:
+                messages.error(request, f"Erro: {str(e)}")
         
         return redirect('meus_contracheques')
-    return redirect('home')
 try:
     from pypdf import PdfReader, PdfWriter
 except ImportError:
@@ -1431,98 +1556,143 @@ except ImportError:
 
 @login_required
 def gerenciar_contracheques(request):
-    # 1. Definição da URL de retorno (Para a lista de Funcionários)
-    # Tenta usar o reverse do admin, se falhar usa o link direto
     try:
-        # Isso gera: /admin/core_rh/funcionario/
         fallback_url = reverse('admin:core_rh_funcionario_changelist')
     except:
         fallback_url = '/admin/core_rh/funcionario/'
         
-    # Se o form trouxer um 'next', usa ele. Se não, usa o fallback.
     next_url = request.POST.get('next') or request.GET.get('next') or fallback_url
 
-    # 2. Verificação de Permissão
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
-        return render(request, 'core_rh/upload_log.html', {
-            'erro_critico': 'Acesso Negado: Você não tem permissão para acessar esta área.',
-            'next_url': next_url
-        })
+        return render(request, 'core_rh/upload_log.html', {'erro_critico': 'Acesso Negado.', 'next_url': next_url})
 
-    # 3. Se for GET, redireciona para a lista de funcionários imediatamente
     if request.method == 'GET':
         return redirect(next_url)
 
-    # 4. PROCESSAMENTO DO ARQUIVO (POST)
     if 'arquivo_pdf' not in request.FILES:
-        return render(request, 'core_rh/upload_log.html', {
-            'erro_critico': 'Nenhum arquivo PDF foi enviado.',
-            'next_url': next_url
-        })
-
-    if not PdfReader:
-        return render(request, 'core_rh/upload_log.html', {
-            'erro_critico': 'Biblioteca pypdf não instalada. Avise o suporte.',
-            'next_url': next_url
-        })
+        return render(request, 'core_rh/upload_log.html', {'erro_critico': 'Nenhum arquivo enviado.', 'next_url': next_url})
 
     try:
         arquivo = request.FILES['arquivo_pdf']
         mes_upload = int(request.POST.get('mes_upload'))
         ano_upload = int(request.POST.get('ano_upload'))
+        
+        # Data apenas para desenho (NÃO SALVA NO BANCO)
+        data_str = request.POST.get('data_recebimento')
+        data_para_pdf = None
+        if data_str:
+            data_para_pdf = datetime.strptime(data_str, '%Y-%m-%d').date()
 
-        try:
-            reader = PdfReader(arquivo)
-        except Exception as e:
-            raise Exception(f"Arquivo inválido ou corrompido: {str(e)}")
+        arquivo.seek(0)
+        plumber_pdf = pdfplumber.open(arquivo)
+        arquivo.seek(0)
+        reader = PdfReader(arquivo)
 
         funcionarios_db = Funcionario.objects.all()
         log_sucesso = []
         log_erro = []
         
         for i, page in enumerate(reader.pages):
-            try:
-                texto = page.extract_text() or ""
-                texto = texto.upper()
-            except:
-                texto = ""
-
-            encontrou = False
+            texto = page.extract_text() or ""
+            texto_upper = texto.upper()
             
+            encontrou_func = False
+            funcionario_encontrado = None
             for func in funcionarios_db:
-                # Normaliza para evitar erros de espaços
                 nome_busca = func.nome_completo.strip().upper()
-                
-                if nome_busca and nome_busca in texto:
-                    writer = PdfWriter()
-                    writer.add_page(page)
-                    pdf_bytes = io.BytesIO()
-                    writer.write(pdf_bytes)
-                    
-                    cc, created = Contracheque.objects.update_or_create(
-                        funcionario=func, mes=mes_upload, ano=ano_upload,
-                        defaults={'arquivo': None}
-                    )
-                    
-                    nome_arq = f"holerite_{func.id}_{mes_upload}_{ano_upload}.pdf"
-                    cc.arquivo.save(nome_arq, ContentFile(pdf_bytes.getvalue()))
-                    
-                    log_sucesso.append({
-                        'pagina': i + 1,
-                        'nome': func.nome_completo,
-                        'status': 'Criado' if created else 'Atualizado'
-                    })
-                    encontrou = True
+                if nome_busca and nome_busca in texto_upper:
+                    funcionario_encontrado = func
+                    encontrou_func = True
                     break 
             
-            if not encontrou:
-                log_erro.append({
-                    'pagina': i + 1,
-                    'motivo': 'Nome não encontrado no texto.'
-                })
+            if encontrou_func:
+                writer = PdfWriter()
+                
+                # --- APLICA A DATA VISUALMENTE (SEM ASSINAR NO SISTEMA) ---
+                if data_para_pdf:
+                    try:
+                        p_page = plumber_pdf.pages[i]
+                        altura_pagina = float(page.mediabox.height)
 
-        # Renderiza o Log passando a next_url correta (/admin/core_rh/funcionario/)
-        context = {
+                        palavras_alvo = p_page.search("DATA DO RECEBIMENTO") or \
+                                        p_page.search("DATA RECEBIMENTO") or \
+                                        p_page.search("RECEBIMENTO")
+                        
+                        palavras_limite = p_page.search("Declaro ter recebido") or \
+                                          p_page.search("Declaro")
+
+                        if palavras_alvo:
+                            target = palavras_alvo[0]
+                            if palavras_limite:
+                                limite_top = palavras_limite[0]['bottom']
+                            else:
+                                limite_top = target['top'] - 40
+
+                            limite_bottom = target['bottom']
+                            rect_y = altura_pagina - limite_bottom
+                            rect_h = limite_bottom - limite_top
+                            rect_x = target['x0'] - 20 
+                            rect_w = (target['x1'] - target['x0']) + 40 
+
+                            packet = io.BytesIO()
+                            can = canvas.Canvas(packet, pagesize=A4)
+                            
+                            # 1. Apaga área antiga
+                            can.setFillColor(colors.white)
+                            can.rect(rect_x, rect_y - 2, rect_w, rect_h + 4, stroke=0, fill=1)
+                            
+                            # 2. Escreve Data Nova
+                            altura_legenda = target['bottom'] - target['top']
+                            tamanho_fonte_data = altura_legenda * 1.8
+                            if tamanho_fonte_data < 12: tamanho_fonte_data = 12
+                            if tamanho_fonte_data > 18: tamanho_fonte_data = 18
+
+                            pos_data_x = target['x0']
+                            pos_data_y = rect_y + 10 
+
+                            can.setFillColor(colors.black)
+                            can.setFont("Helvetica-Bold", tamanho_fonte_data)
+                            can.drawString(pos_data_x, pos_data_y, data_para_pdf.strftime("%d/%m/%Y"))
+
+                            # 3. Refaz linha e legenda
+                            can.setLineWidth(0.5)
+                            can.line(rect_x, rect_y + 8, rect_x + rect_w, rect_y + 8)
+                            can.setFont("Helvetica", 6)
+                            can.drawCentredString(rect_x + (rect_w/2), rect_y, "DATA DO RECEBIMENTO")
+                            
+                            can.save()
+                            packet.seek(0)
+                            overlay = PdfReader(packet)
+                            page.merge_page(overlay.pages[0])
+                    except Exception:
+                        pass # Segue sem data se der erro no desenho
+
+                writer.add_page(page)
+                pdf_bytes = io.BytesIO()
+                writer.write(pdf_bytes)
+                
+                # --- SALVA NO BANCO (SEM DATA_CIENCIA) ---
+                # Removemos a lógica que setava data_ciencia aqui
+                
+                cc, created = Contracheque.objects.update_or_create(
+                    funcionario=funcionario_encontrado, mes=mes_upload, ano=ano_upload,
+                    defaults={'arquivo': None} # Reseta arquivo para salvar o novo
+                )
+                
+                nome_arq = f"holerite_{funcionario_encontrado.id}_{mes_upload}_{ano_upload}.pdf"
+                cc.arquivo.save(nome_arq, ContentFile(pdf_bytes.getvalue()))
+                
+                log_sucesso.append({
+                    'pagina': i + 1,
+                    'nome': funcionario_encontrado.nome_completo,
+                    'status': 'Processado'
+                })
+            else:
+                log_erro.append({'pagina': i + 1, 'motivo': 'Nome não encontrado.'})
+        
+        plumber_pdf.close()
+
+        return render(request, 'core_rh/upload_log.html', {
             'log_sucesso': log_sucesso,
             'log_erro': log_erro,
             'total_sucesso': len(log_sucesso),
@@ -1530,11 +1700,114 @@ def gerenciar_contracheques(request):
             'mes_nome': dict(Contracheque.MESES).get(mes_upload, mes_upload),
             'ano': ano_upload,
             'next_url': next_url, 
-        }
-        return render(request, 'core_rh/upload_log.html', context)
+        })
 
     except Exception as e:
-        return render(request, 'core_rh/upload_log.html', {
-            'erro_critico': f"Erro no processamento: {str(e)}",
-            'next_url': next_url
-        })
+        return render(request, 'core_rh/upload_log.html', {'erro_critico': str(e), 'next_url': next_url})
+@login_required
+def upload_individual_contracheque(request, func_id):
+    if not (request.user.is_staff or usuario_eh_rh(request.user)):
+        return HttpResponse("Acesso negado", status=403)
+        
+    if request.method == 'POST' and request.FILES.get('arquivo_individual'):
+        funcionario = get_object_or_404(Funcionario, pk=func_id)
+        arquivo = request.FILES['arquivo_individual']
+        
+        try:
+            mes = int(request.POST.get('mes'))
+            ano = int(request.POST.get('ano'))
+            
+            # Data Opcional (apenas para desenho)
+            data_str = request.POST.get('data_recebimento_individual')
+            data_para_pdf = None
+            if data_str:
+                data_para_pdf = datetime.strptime(data_str, '%Y-%m-%d').date()
+                
+        except (ValueError, TypeError):
+            messages.error(request, "Dados inválidos.")
+            return redirect(request.META.get('HTTP_REFERER', '/'))
+
+        # --- PROCESSAMENTO DO PDF INDIVIDUAL (MESMA LÓGICA) ---
+        try:
+            arquivo.seek(0)
+            plumber_pdf = pdfplumber.open(arquivo)
+            arquivo.seek(0)
+            reader = PdfReader(arquivo)
+            writer = PdfWriter()
+
+            for i, page in enumerate(reader.pages):
+                if data_para_pdf:
+                    try:
+                        p_page = plumber_pdf.pages[i]
+                        altura_pagina = float(page.mediabox.height)
+                        
+                        palavras_alvo = p_page.search("DATA DO RECEBIMENTO") or p_page.search("RECEBIMENTO")
+                        palavras_limite = p_page.search("Declaro ter recebido") or p_page.search("Declaro")
+
+                        if palavras_alvo:
+                            target = palavras_alvo[0]
+                            limite_top = palavras_limite[0]['bottom'] if palavras_limite else target['top'] - 40
+                            limite_bottom = target['bottom']
+                            
+                            rect_y = altura_pagina - limite_bottom
+                            rect_h = limite_bottom - limite_top
+                            rect_x = target['x0'] - 20 
+                            rect_w = (target['x1'] - target['x0']) + 40 
+
+                            packet = io.BytesIO()
+                            can = canvas.Canvas(packet, pagesize=A4)
+                            
+                            # Desenha Branco e Data
+                            can.setFillColor(colors.white)
+                            can.rect(rect_x, rect_y - 2, rect_w, rect_h + 4, stroke=0, fill=1)
+                            
+                            altura_legenda = target['bottom'] - target['top']
+                            tamanho = max(12, min(18, altura_legenda * 1.8))
+                            
+                            can.setFillColor(colors.black)
+                            can.setFont("Helvetica-Bold", tamanho)
+                            can.drawString(target['x0'], rect_y + 10, data_para_pdf.strftime("%d/%m/%Y"))
+
+                            can.setLineWidth(0.5)
+                            can.line(rect_x, rect_y + 8, rect_x + rect_w, rect_y + 8)
+                            can.setFont("Helvetica", 6)
+                            can.drawCentredString(rect_x + (rect_w/2), rect_y, "DATA DO RECEBIMENTO")
+                            
+                            can.save()
+                            packet.seek(0)
+                            overlay = PdfReader(packet)
+                            page.merge_page(overlay.pages[0])
+                    except: pass
+                
+                writer.add_page(page)
+            
+            plumber_pdf.close()
+            pdf_bytes = io.BytesIO()
+            writer.write(pdf_bytes)
+            
+            # SALVA NO BANCO (SEM CONFIRMAR ASSINATURA)
+            cc, created = Contracheque.objects.update_or_create(
+                funcionario=funcionario, mes=mes, ano=ano,
+                defaults={'arquivo': None}
+            )
+            
+            nome_arq = f"holerite_{funcionario.id}_{mes}_{ano}_manual.pdf"
+            cc.arquivo.save(nome_arq, ContentFile(pdf_bytes.getvalue()))
+            
+            messages.success(request, f"Contracheque de {funcionario.nome_completo} anexado!")
+
+        except Exception as e:
+            messages.error(request, f"Erro ao processar arquivo: {e}")
+        
+    return redirect(request.META.get('HTTP_REFERER', '/'))
+@login_required
+def excluir_contracheque(request, cc_id):
+    if not (request.user.is_staff or usuario_eh_rh(request.user)):
+        return HttpResponse("Acesso negado", status=403)
+        
+    contracheque = get_object_or_404(Contracheque, pk=cc_id)
+    nome = contracheque.funcionario.nome_completo
+    contracheque.delete()
+    
+    messages.success(request, f"Contracheque de {nome} removido com sucesso.")
+    return redirect(request.META.get('HTTP_REFERER', '/'))

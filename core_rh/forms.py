@@ -33,6 +33,14 @@ class CpfPasswordResetForm(forms.Form):
         return cpf_limpo
     
 class UploadLoteContrachequeForm(forms.Form):
-    arquivo = forms.FileField(label="Arquivo PDF Único (Todos os Funcionários)")
     mes = forms.ChoiceField(choices=Contracheque.MESES, label="Mês de Referência")
-    ano = forms.IntegerField(label="Ano de Referência", initial=2025)
+    ano = forms.IntegerField(label="Ano", initial=2025)
+    
+    # NOVO CAMPO: Data de Recebimento (Preenchimento em massa)
+    data_recebimento = forms.DateField(
+        label="Data do Recebimento (Assinatura)",
+        required=False, # Opcional: Se deixar vazio, o funcionário assina depois
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'})
+    )
+    
+    arquivo = forms.FileField(label="Arquivo PDF (Folha Completa)")

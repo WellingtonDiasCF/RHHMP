@@ -12,7 +12,7 @@
         <div class="card-body">
             <p class="text-muted">
                 Faça o upload de um arquivo PDF contendo todos os holerites. 
-                O sistema irá ler página por página, identificar o nome do funcionário e enviar automaticamente para o portal dele.
+                O sistema irá ler página por página, identificar o nome do funcionário e enviar automaticamente.
             </p>
             
             <form method="post" enctype="multipart/form-data">
@@ -21,11 +21,11 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold">Arquivo PDF (Geral)</label>
                     {{ form.arquivo }}
-                    <small class="d-block text-muted">O arquivo deve conter texto selecionável (não pode ser imagem escaneada).</small>
+                    <small class="d-block text-muted">O arquivo deve conter texto selecionável.</small>
                 </div>
 
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label fw-bold">Mês de Referência</label>
                         <select name="mes" class="form-control form-select">
                             {% for value, text in form.fields.mes.choices %}
@@ -33,9 +33,15 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label fw-bold">Ano</label>
                         <input type="number" name="ano" value="2025" class="form-control">
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-bold">Data da Assinatura (Opcional)</label>
+                        {{ form.data_recebimento }}
+                        <small class="text-muted" style="font-size: 0.75rem;">Se preenchido, assina automaticamente.</small>
                     </div>
                 </div>
 
@@ -51,6 +57,6 @@
 </div>
 
 <style>
-    input[type=file] { display: block; width: 100%; padding: .375rem .75rem; font-size: 1rem; border: 1px solid #ced4da; border-radius: .25rem; }
+    input[type=file], input[type=date] { display: block; width: 100%; padding: .375rem .75rem; font-size: 1rem; border: 1px solid #ced4da; border-radius: .25rem; }
 </style>
 {% endblock %}
