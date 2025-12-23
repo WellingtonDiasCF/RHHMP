@@ -1,543 +1,464 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Folha de Ponto - {{ nome_mes }} {{ ano_atual }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        orange: {
-                            500: '#f97316',
-                            600: '#ea580c',
-                            700: '#c2410c',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <title>Meu Ponto | Portal RH</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
-        
-        .weekend-bg, .holiday-bg { 
-            background-color: #9ca3af; 
-            color: #374151; 
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Inter', sans-serif;
+            color: #333;
+            min-height: 100vh;
+            padding-bottom: 100px;
         }
-        
-        .time-input {
-            width: 100%; 
-            text-align: center; 
-            border: 1px solid #d1d5db; 
-            border-radius: 0.25rem; 
-            padding: 0.25rem;
-            font-size: 0.85rem; 
-            background-color: rgba(255, 255, 255, 0.7); 
-            color: #000;
-            height: 36px;
+
+        /* Navbar Padrão */
+        .navbar-custom {
+            background: linear-gradient(to right, #1a1a1a, #333);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
-        .time-input:focus {
-            outline: none;
-            border-color: #f97316;
+
+        /* Layout */
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .header-box {
+            background: #fff;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        /* Inputs da Tabela */
+        .form-control-time {
+            border: 1px solid #dee2e6;
+            text-align: center;
+            font-size: 0.9rem;
+            padding: 4px;
+            border-radius: 6px;
+            width: 100%;
+            min-width: 70px;
             background-color: #fff;
-            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+        }
+        .form-control-time:focus {
+            border-color: #FF6600;
+            box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.15);
+            background-color: #fff !important;
+        }
+        .input-obs {
+            font-size: 0.85rem;
+            border-radius: 6px;
         }
 
-        /* Estilo para campos desabilitados (Bloqueados) */
-        .input-disabled {
-            background-color: #e5e7eb !important; /* Cinza */
-            color: #6b7280 !important;
-            cursor: not-allowed;
-            border-color: #d1d5db;
+        /* --- ESTILOS DE LINHA E CORES --- */
+
+        /* 1. FIM DE SEMANA (Cinza) */
+        .row-weekend td { 
+            background-color: #949191ff !important; 
+            color: #000000ff;
         }
+
+        /* 2. FERIADO (Verde Claro) */
+        .row-feriado td { 
+            background-color: #d1e7dd !important; 
+            color: #0f5132;
+        }
+
+        /* 3. ATESTADO DE DIAS (Vermelho Claro) */
+        .row-atestado-dias td { 
+            background-color: #fee2e2 !important; 
+            color: #000000ff;
+        }
+
+        /* 4. ATESTADO DE HORAS (Amarelo Claro) */
+        .row-atestado-horas td { 
+            background-color: #fef9c3 !important; 
+            color: #000000ff;
+        }
+
+        /* 5. FÉRIAS (Azul Claro) */
+        .row-ferias td {
+            background-color: #cff4fc !important; /* Ciano/Azul suave Bootstrap */
+            color: #055160;
+        }
+
+        /* Deixa os inputs transparentes nessas linhas */
+        .row-weekend input, 
+        .row-feriado input, 
+        .row-atestado-dias input,
+        .row-atestado-horas input,
+        .row-ferias input {
+            background-color: transparent !important;
+            border-color: rgba(0,0,0,0.1);
+        }
+
+        /* Badges */
+        .badge-feriado { background: #198754; color: white; }
+        .badge-atestado-dias { background: #ff0000ff; color: white; }
+        .badge-atestado-horas { background: #757e02ff; color: white; }
+        .badge-ferias { background: #0dcaf0; color: black; } /* Azul Ciano */
+
+        /* Cores Específicas para o Texto da Observação */
+        .obs-feriado { color: #198754 !important; font-weight: bold; }
+        .obs-atestado-dias { color: #ff0000ff !important; font-weight: bold; font-style: italic; }
+        .obs-atestado-horas { color: #757e02ff !important; font-weight: bold; }
+        .obs-ferias { color: #0aa2c0 !important; font-weight: bold; } /* Um azul um pouco mais escuro para ler melhor */
+
+        /* Tabela expandida */
+        .table-responsive { overflow: visible; }
         
-        .table-sticky-header th { 
-            position: sticky; 
-            top: 0; 
-            background-color: #ea580c; 
-            color: white; 
-            z-index: 10; 
-            font-weight: 700;
-            border-right: 1px solid rgba(255,255,255,0.2);
+        /* Cabeçalho Sticky */
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            padding-top: 15px;
+            padding-bottom: 15px;
         }
 
-        /* --- CSS OTIMIZADO PARA MOBILE (GRID) --- */
-        @media (max-width: 768px) {
-            thead { display: none; }
-            
-            table { display: block; width: 100%; }
-            tbody { display: block; width: 100%; }
-
-            /* TRUQUE: Esconde o ícone de relógio no mobile para ganhar espaço */
-            input[type="time"]::-webkit-calendar-picker-indicator {
-                display: none;
-                -webkit-appearance: none;
-            }
-
-            /* Força input compacto no mobile */
-            .time-input {
-                padding: 0 !important;
-                font-size: 0.70rem !important;
-                height: 32px !important;
-                letter-spacing: -0.5px;
-            }
-
-            /* O TR vira um container de GRID */
-            tr {
-                display: grid;
-                grid-template-columns: repeat(4, 1fr); /* 4 Colunas iguais */
-                gap: 2px;
-                margin-bottom: 1rem;
-                background-color: white;
-                border: 1px solid #e5e7eb;
-                border-radius: 0.5rem;
-                padding: 0.5rem;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            }
-
-            td {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                padding: 0;
-                border: none;
-            }
-
-            /* --- Organização dos Itens no Grid --- */
-            td:nth-child(1), /* Data */
-            td:nth-child(2)  /* Dia da Semana */
-            {
-                grid-column: span 4;
-                flex-direction: row;
-                background-color: transparent;
-                padding-bottom: 4px;
-                border-bottom: 1px solid #eee;
-                margin-bottom: 4px;
-            }
-            
-            td:nth-child(1) {
-                background-color: #ea580c;
-                color: white;
-                margin: -0.5rem -0.5rem 0.5rem -0.5rem;
-                padding: 0.5rem;
-                border-radius: 0.4rem 0.4rem 0 0;
-                font-size: 1.1rem;
-            }
-
-            td:nth-child(3), td:nth-child(4), td:nth-child(5), td:nth-child(6) {
-                grid-column: span 1;
-            }
-
-            td:nth-child(7), td:nth-child(8) {
-                grid-column: span 2;
-                background-color: #f3f4f6;
-                border-radius: 4px;
-                padding: 2px;
-            }
-
-            td:nth-child(9), td:nth-child(10) {
-                grid-column: span 4;
-                padding-top: 4px;
-            }
-            
-            .mobile-label {
-                font-size: 0.60rem;
-                font-weight: bold;
-                color: #6b7280;
-                text-transform: uppercase;
-                margin-bottom: 1px;
-                display: block;
-                white-space: nowrap;
-            }
+        /* Botão Flutuante */
+        .floating-save-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+            border: 1px solid rgba(0,0,0,0.05);
         }
     </style>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Função Cálculo Horas
-            function calcularHoraExtra(entrada, saida) {
-                if (!entrada || !saida) return "00:00";
-                const [hEnt, mEnt] = entrada.split(':').map(Number);
-                const [hSai, mSai] = saida.split(':').map(Number);
-                let minutosEnt = hEnt * 60 + mEnt;
-                let minutosSai = hSai * 60 + mSai;
-                if (minutosSai < minutosEnt) minutosSai += 24 * 60;
-                const diffMinutos = minutosSai - minutosEnt;
-                const horas = Math.floor(diffMinutos / 60);
-                const minutos = diffMinutos % 60;
-                return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
-            }
-
-            function atualizarTotal(dia) {
-                const entradaInput = document.querySelector(`input[name="entrada_extra_${dia}"]`);
-                const saidaInput = document.querySelector(`input[name="saida_extra_${dia}"]`);
-                const totalSpan = document.getElementById(`total_extra_${dia}`);
-                if (entradaInput && saidaInput && totalSpan) {
-                    const total = calcularHoraExtra(entradaInput.value, saidaInput.value);
-                    totalSpan.textContent = total;
-                }
-            }
-
-            const inputs = document.querySelectorAll('input[name^="entrada_extra_"], input[name^="saida_extra_"]');
-            inputs.forEach(input => {
-                input.addEventListener('change', function() {
-                    const dia = this.name.split('_').pop();
-                    atualizarTotal(dia);
-                });
-            });
-
-            // Lógica do Modal de Assinatura
-            const btnAssinar = document.getElementById('btn-assinar-govbr');
-            const modalAssinatura = document.getElementById('modal-assinatura');
-            const btnFecharModal = document.getElementById('btn-fechar-modal');
-
-            if(btnAssinar) {
-                btnAssinar.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    modalAssinatura.classList.remove('hidden');
-                });
-            }
-
-            if(btnFecharModal) {
-                btnFecharModal.addEventListener('click', () => {
-                    modalAssinatura.classList.add('hidden');
-                });
-            }
-        });
-    </script>
 </head>
-<body class="bg-gray-50 font-sans"
-      data-ent-padrao="{{ funcionario.jornada_entrada|date:'H' }}"
+<body data-ent-padrao="{{ funcionario.jornada_entrada|date:'H' }}"
       data-sai-padrao="{{ funcionario.jornada_saida|date:'H' }}"
       data-intervalo="{{ funcionario.intervalo_padrao }}">
-    
-    {% if messages %}
-        <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2">
-            {% for message in messages %}
-                <div class="flex items-center w-full max-w-xs p-4 text-gray-700 bg-white rounded-lg shadow border-l-4 {% if message.tags == 'success' %}border-green-500 bg-green-50{% else %}border-red-500 bg-red-50{% endif %}" role="alert">
-                    <div class="ml-3 text-sm font-normal">{{ message }}</div>
-                    <button type="button" class="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg p-1.5 hover:bg-gray-100 inline-flex h-8 w-8" onclick="this.parentElement.remove()">
-                        <span class="sr-only">Fechar</span>
-                        <svg class="w-3 h-3" fill="none" viewBox="0 0 14 14"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6"/></svg>
+
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">
+                <i class="fas fa-clock me-2 text-warning"></i> Portal RH <span class="fw-light text-white-50">| Ponto</span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-white small d-none d-md-block">Olá, {{ request.user.first_name }}</span>
+                <a href="{% url 'home' %}" class="btn btn-sm btn-outline-light rounded-pill px-3">Início</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        
+        <div class="header-box">
+            <div>
+                <h3 class="fw-bold text-dark mb-1">Folha de Ponto</h3>
+                <div class="d-flex align-items-center gap-3 mt-2">
+                    {% if prev_mes %}
+                        <a href="?mes={{ prev_mes }}&ano={{ prev_ano }}" class="btn btn-sm btn-light border rounded-pill">
+                            <i class="fas fa-chevron-left"></i>
+                        </a>
+                    {% endif %}
+                    
+                    <span class="fw-bold text-primary fs-5" style="min-width: 150px; text-align: center;">
+                        {{ nome_mes }}
+                    </span>
+
+                    {% if next_mes %}
+                        <a href="?mes={{ next_mes }}&ano={{ next_ano }}" class="btn btn-sm btn-light border rounded-pill">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap justify-content-end align-self-center">
+                {% if not is_locked %}
+                    <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fas fa-save me-2"></i> Salvar
                     </button>
+                {% else %}
+                    <button disabled class="btn btn-secondary rounded-pill px-4 fw-bold">
+                        <i class="fas fa-lock me-2"></i> Fechado
+                    </button>
+                {% endif %}
+
+                <a href="{% url 'gerar_pdf_ponto' %}?mes={{ mes_atual }}&ano={{ ano_atual }}" target="_blank" class="btn btn-outline-danger rounded-pill px-4 fw-bold">
+                    <i class="fas fa-file-pdf me-2"></i> PDF
+                </a>
+
+                {% if not is_locked %}
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalAssinatura">
+                        <i class="fas fa-file-signature me-2"></i> Assinar
+                    </button>
+                {% endif %}
+            </div>
+
+            <div class="w-100 d-flex flex-wrap gap-4 mt-3 pt-3 border-top">
+                <div class="d-flex align-items-center" title="Dias não úteis">
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #6d6a6aff;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Fim de Semana</small>
+                </div>
+                <div class="d-flex align-items-center" title="Feriados Nacionais/Estaduais">
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #198754;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Feriado</small>
+                </div>
+                <div class="d-flex align-items-center" title="Afastamento por atestado médico (Dias)">
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #ff0000ff;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Atestado (Afastamento)</small>
+                </div>
+                <div class="d-flex align-items-center" title="Declaração de comparecimento (Horas)">
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #757e02ff;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Comparecimento (Horas)</small>
+                </div>
+                <div class="d-flex align-items-center" title="Período de Férias">
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #0dcaf0;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Férias</small>
+                </div>
+            </div>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} border-0 shadow-sm rounded-4 mb-4">
+                    <i class="fas fa-info-circle me-2"></i> {{ message }}
                 </div>
             {% endfor %}
-        </div>
-        <script>
-            setTimeout(function() {
-                const toast = document.getElementById('toast-container');
-                if(toast) toast.style.display = 'none';
-            }, 5000);
-        </script>
-    {% endif %}
-
-    <div class="w-full max-w-7xl mx-auto p-2 sm:p-6 lg:p-8">
-        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
-            <div>
-                <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">
-                    Folha de Ponto
-                </h1>
-                <p class="text-lg text-orange-600 font-bold">{{ nome_mes }} de {{ ano_atual }}</p>
-            </div>
-
-            <div class="flex flex-wrap gap-2 w-full lg:w-auto">
-                <a href="{% url 'home' %}" class="flex-1 lg:flex-none justify-center px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow hover:bg-gray-700 transition duration-150 flex items-center text-sm sm:text-base">
-                    <svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                    Voltar
-                </a>
-                
-                {% if not is_locked %}
-                <button type="submit" form="ponto-form" class="flex-1 lg:flex-none justify-center px-4 py-2 bg-green-600 text-white font-semibold rounded-lg shadow hover:bg-green-700 transition duration-150 flex items-center text-sm sm:text-base">
-                    <svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v8"></path></svg>
-                    Salvar
-                </button>
-                {% endif %}
-
-                <a href="{% url 'gerar_pdf_ponto' %}?mes={{ mes_atual }}&ano={{ ano_atual }}" target="_blank" class="flex-1 lg:flex-none justify-center px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow hover:bg-red-700 transition duration-150 flex items-center text-sm sm:text-base">
-                    <svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                    PDF
-                </a>
-
-                {% if not is_locked %}
-                <button id="btn-assinar-govbr" class="flex-1 lg:flex-none justify-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow hover:bg-blue-700 transition duration-150 flex items-center text-sm sm:text-base">
-                    <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-                    </svg>
-                    Assinar
-                </button>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="overflow-x-auto mb-6">
-            {% include "core_rh/includes/month_nav.html" %}
-        </div>
-        
-        <div class="bg-orange-50 border-l-4 border-orange-500 text-orange-900 p-4 rounded mb-6 shadow-sm">
-            <p class="font-bold">Orientações:</p>
-            <p class="text-sm">Preencha diariamente. Clique em "Salvar" para gravar. Para finalizar o mês, gere o PDF, assine no Gov.br e anexe abaixo.</p>
-        </div>
-
-        {% if is_locked %}
-        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded mb-6 shadow-sm flex items-center">
-            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-            <div>
-                <p class="font-bold">Folha Fechada</p>
-                <p class="text-sm">Esta competência já foi assinada pelo gestor. Edições e novos envios estão bloqueados.</p>
-            </div>
-        </div>
         {% endif %}
 
-        <div class="bg-transparent md:bg-white md:shadow-lg rounded-lg md:overflow-hidden md:border border-gray-200">
-            <div class="point-table-container">
+        <div class="card border-0 shadow-sm rounded-4 bg-white">
+            <div class="table-responsive">
                 <form method="post" action="{% url 'salvar_ponto' %}" id="ponto-form">
                     {% csrf_token %}
                     <input type="hidden" name="mes" value="{{ mes_atual }}">
                     <input type="hidden" name="ano" value="{{ ano_atual }}">
 
-                    <table class="w-full text-sm text-left text-gray-700">
-                        <thead class="text-xs uppercase table-sticky-header hidden md:table-header-group">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="bg-light">
                             <tr>
-                                <th scope="col" class="px-2 py-3 w-10 text-center">Data</th>
-                                <th scope="col" class="px-3 py-3 w-28 text-center">Dia</th>
-                                
-                                <th scope="col" class="px-2 py-3 text-center">Entrada</th>
-                                <th scope="col" class="px-2 py-3 text-center">Saída Almoço</th>
-                                <th scope="col" class="px-2 py-3 text-center">Entrada Almoço</th>
-                                <th scope="col" class="px-2 py-3 text-center">Saída</th>
-                                
-                                <th scope="col" class="px-2 py-3 text-center bg-gray-600 border-l border-white">Entrada Extra</th>
-                                <th scope="col" class="px-2 py-3 text-center bg-gray-600">Saída Extra</th>
-                                
-                                <th scope="col" class="px-2 py-3 text-center">Total Hora Extra</th>
-                                <th scope="col" class="px-4 py-3 text-left">Observações</th>
+                                <th class="ps-4 text-secondary">Dia</th>
+                                <th class="text-center text-secondary">Entrada</th>
+                                <th class="text-center text-secondary">Almoço Sai</th>
+                                <th class="text-center text-secondary">Almoço Volta</th>
+                                <th class="text-center text-secondary">Saída</th>
+                                <th class="text-center text-primary bg-primary-subtle border-start">Ent. Extra</th>
+                                <th class="text-center text-primary bg-primary-subtle">Sai. Extra</th>
+                                <th class="pe-4 text-secondary">Observações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for dia in dias_do_mes %}
-                                {% with data=dia.data registro=dia.registro %}
-                                    <tr class="transition-colors
-                                        {% if dia.eh_feriado or dia.eh_fim_de_semana %}
-                                            weekend-bg
-                                        {% else %}
-                                            bg-white
-                                        {% endif %}
-                                    ">
-                                        <td class="px-2 py-2 text-center md:font-bold border-b md:border-b-0">
-                                            <span class="md:hidden mr-2">Dia:</span>
-                                            {{ data.day }}
-                                        </td>
-                                        
-                                        <td class="px-3 py-2 text-center text-xs font-semibold uppercase border-b md:border-b-0">
-                                            <span class="md:hidden mr-2 font-bold text-gray-500">Semana:</span>
-                                            {{ dia.dia_semana_nome }}
-                                            {% if dia.eh_feriado %}
-                                                <span class="md:block inline ml-2 md:ml-0 text-[10px] text-red-800 font-extrabold mt-1">FERIADO</span>
+                                {% with reg=dia.registro %}
+                                <tr class="
+                                    {% if dia.eh_ferias %}row-ferias
+                                    {% elif dia.tipo_atestado == 'DIAS' %}row-atestado-dias
+                                    {% elif dia.tipo_atestado == 'HORAS' %}row-atestado-horas
+                                    {% elif dia.eh_feriado %}row-feriado
+                                    {% elif dia.eh_fim_de_semana %}row-weekend{% endif %}
+                                ">
+                                    <td class="ps-4">
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-bold fs-5">{{ dia.data.day }}</span>
+                                            <small class="text-uppercase" style="font-size: 0.7rem;">{{ dia.dia_semana_nome }}</small>
+                                            
+                                            {% if dia.eh_ferias %}
+                                                <span class="badge badge-ferias rounded-pill mt-1">FÉRIAS</span>
+                                            {% elif dia.eh_feriado %}
+                                                <span class="badge badge-feriado rounded-pill mt-1">FERIADO</span>
+                                            {% elif dia.tipo_atestado == 'DIAS' %}
+                                                <span class="badge badge-atestado-dias rounded-pill mt-1">ATESTADO</span>
+                                            {% elif dia.tipo_atestado == 'HORAS' %}
+                                                <span class="badge badge-atestado-horas rounded-pill mt-1" style="font-size: 0.65rem;">COMPARECIMENTO</span>
                                             {% endif %}
-                                        </td>
+                                        </div>
+                                    </td>
 
-                                        <td class="px-1 py-1 border-b md:border-b-0">
-                                            <span class="mobile-label md:hidden">Ent.</span>
-                                            <input type="time" name="entrada_1_{{ data.day }}" value="{{ registro.entrada_manha|date:'H:i'|default:'' }}" class="time-input {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
-                                        <td class="px-1 py-1 border-b md:border-b-0">
-                                            <span class="mobile-label md:hidden">S. Alm</span>
-                                            <input type="time" name="saida_1_{{ data.day }}" value="{{ registro.saida_almoco|date:'H:i'|default:'' }}" class="time-input {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
-                                        <td class="px-1 py-1 border-b md:border-b-0">
-                                            <span class="mobile-label md:hidden">E. Alm</span>
-                                            <input type="time" name="entrada_2_{{ data.day }}" value="{{ registro.volta_almoco|date:'H:i'|default:'' }}" class="time-input {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
-                                        <td class="px-1 py-1 border-b md:border-b-0">
-                                            <span class="mobile-label md:hidden">Sai.</span>
-                                            <input type="time" name="saida_2_{{ data.day }}" value="{{ registro.saida_tarde|date:'H:i'|default:'' }}" class="time-input {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
+                                    {% if dia.eh_ferias or dia.tipo_atestado == 'DIAS' %}
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                        <td class="text-center text-muted border-start">-</td>
+                                        <td class="text-center text-muted">-</td>
+                                    
+                                    {% else %}
+                                        <td class="p-1"><input type="time" name="entrada_1_{{ dia.data.day }}" value="{{ reg.entrada_manha|date:'H:i'|default:'' }}" class="form-control form-control-time" {% if is_locked %}disabled{% endif %}></td>
+                                        <td class="p-1"><input type="time" name="saida_1_{{ dia.data.day }}" value="{{ reg.saida_almoco|date:'H:i'|default:'' }}" class="form-control form-control-time" {% if is_locked %}disabled{% endif %}></td>
+                                        <td class="p-1"><input type="time" name="entrada_2_{{ dia.data.day }}" value="{{ reg.volta_almoco|date:'H:i'|default:'' }}" class="form-control form-control-time" {% if is_locked %}disabled{% endif %}></td>
+                                        <td class="p-1"><input type="time" name="saida_2_{{ dia.data.day }}" value="{{ reg.saida_tarde|date:'H:i'|default:'' }}" class="form-control form-control-time" {% if is_locked %}disabled{% endif %}></td>
                                         
-                                        <td class="px-1 py-1 md:border-l border-b md:border-b-0 border-gray-300">
-                                            <span class="mobile-label md:hidden text-blue-800">Ent. Extra</span>
-                                            <input type="time" name="entrada_extra_{{ data.day }}" value="{{ registro.extra_entrada|date:'H:i'|default:'' }}" class="time-input font-semibold text-blue-900 {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
-                                        <td class="px-1 py-1 border-b md:border-b-0">
-                                            <span class="mobile-label md:hidden text-blue-800">Sai. Extra</span>
-                                            <input type="time" name="saida_extra_{{ data.day }}" value="{{ registro.extra_saida|date:'H:i'|default:'' }}" class="time-input font-semibold text-blue-900 {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
+                                        <td class="p-1 border-start"><input type="time" name="entrada_extra_{{ dia.data.day }}" value="{{ reg.extra_entrada|date:'H:i'|default:'' }}" class="form-control form-control-time fw-bold" {% if is_locked %}disabled{% endif %}></td>
+                                        <td class="p-1"><input type="time" name="saida_extra_{{ dia.data.day }}" value="{{ reg.extra_saida|date:'H:i'|default:'' }}" class="form-control form-control-time fw-bold" {% if is_locked %}disabled{% endif %}></td>
+                                    {% endif %}
 
-                                        <td class="px-2 py-1 text-center font-bold text-gray-800 border-b md:border-b-0">
-                                            <span class="md:hidden w-1/3 text-left text-xs font-bold text-gray-600 uppercase">Total Extra:</span>
-                                            <span id="total_extra_{{ data.day }}">00:00</span>
-                                        </td>
-                                        
-                                        <td class="px-2 py-2 md:border-b-0">
-                                            <input type="text" placeholder="Obs..." name="observacoes_{{ data.day }}" 
-                                                value="{% if dia.eh_feriado %}FERIADO{% else %}{{ registro.observacao|default:'' }}{% endif %}" 
-                                                class="w-full text-xs border border-gray-300 rounded px-2 py-2 md:py-1 focus:border-orange-500 focus:outline-none bg-white/90 {% if is_locked %}input-disabled{% endif %}" {% if is_locked %}disabled{% endif %}>
-                                        </td>
-                                    </tr>
+                                    <td class="pe-4 p-1" style="min-width: 200px;">
+                                        <input type="text" name="observacoes_{{ dia.data.day }}" 
+                                               value="{{ dia.obs_visual }}" 
+                                               class="form-control input-obs 
+                                               {% if dia.eh_ferias %}bg-transparent border-0 obs-ferias
+                                               {% elif dia.tipo_atestado == 'DIAS' %}bg-transparent border-0 obs-atestado-dias
+                                               {% elif dia.tipo_atestado == 'HORAS' %}bg-transparent border-0 obs-atestado-horas
+                                               {% elif dia.eh_feriado %}bg-transparent border-0 obs-feriado{% endif %}"
+                                               {% if is_locked or dia.eh_ferias or dia.tipo_atestado == 'DIAS' or dia.eh_feriado %}readonly{% endif %}
+                                               placeholder="Obs...">
+                                    </td>
+                                </tr>
                                 {% endwith %}
                             {% endfor %}
                         </tbody>
                     </table>
+                    
+                    <div class="p-4 bg-light border-top text-end">
+                        <button type="submit" class="btn btn-success rounded-pill px-5 fw-bold">
+                            <i class="fas fa-save me-2"></i> Salvar Alterações
+                        </button>
+                    </div>
                 </form>
             </div>
-            
-            <div class="p-4 sm:p-6 bg-gray-100 border-t flex flex-col sm:flex-row justify-end sticky bottom-0 z-20">
-                {% if not is_locked %}
-                <div class="flex space-x-4 w-full sm:w-auto">
-                    <button type="submit" form="ponto-form" class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 transition duration-150">
-                        Salvar Alterações
-                    </button>
-                </div>
-                {% endif %}
-            </div>
         </div>
     </div>
 
-    <div id="modal-assinatura" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-96 shadow-lg rounded-md bg-white">
-            <div class="mt-3 text-center">
-                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-                    <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+    {% if not is_locked %}
+    <div class="floating-save-bar">
+        <span class="text-muted align-self-center small d-none d-md-block">Não esqueça de salvar seu progresso</span>
+        <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+            <i class="fas fa-save me-2"></i> Salvar
+        </button>
+    </div>
+    {% endif %}
+
+    <div class="modal fade" id="modalAssinatura" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-file-signature me-2 text-primary"></i> Assinar Folha</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">Assinar Documento</h3>
-                <div class="mt-2 px-2 py-3">
-                    <p class="text-sm text-gray-500 mb-4">Siga os passos para assinar digitalmente sua folha:</p>
-                    <ol class="text-left text-sm text-gray-600 list-decimal pl-4 space-y-2 mb-4">
-                        <li>Clique em <strong>PDF</strong> para baixar o arquivo.</li>
-                        <li>Acesse o <a href="https://assinador.iti.br" target="_blank" class="text-blue-600 underline font-bold">Assinador do Gov.br</a>.</li>
-                        <li>Faça login, suba o PDF e assine.</li>
-                        <li>Baixe o arquivo assinado ("..._assinado.pdf").</li>
-                        <li>Envie o arquivo final abaixo:</li>
+                <div class="modal-body p-4">
+                    
+                    <div class="d-grid mb-4">
+                        <a href="{% url 'gerar_pdf_ponto' %}?mes={{ mes_atual }}&ano={{ ano_atual }}" class="btn btn-outline-danger py-2 fw-bold">
+                            <i class="fas fa-download me-2"></i> 1. Baixar Folha em PDF
+                        </a>
+                    </div>
+
+                    <ol class="list-group list-group-numbered mb-4 small text-muted">
+                        <li class="list-group-item border-0 p-1">Após baixar o arquivo acima...</li>
+                        <li class="list-group-item border-0 p-1">Acesse o <a href="https://assinador.iti.br" target="_blank" class="fw-bold">Gov.br (Assinador)</a>.</li>
+                        <li class="list-group-item border-0 p-1">Assine digitalmente e salve o arquivo.</li>
+                        <li class="list-group-item border-0 p-1">Envie o arquivo assinado (.p7s ou .pdf) abaixo:</li>
                     </ol>
                     
-                    <form action="{% url 'salvar_ponto' %}" method="post" enctype="multipart/form-data" class="mt-4">
+                    <form action="{% url 'salvar_ponto' %}" method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
                         <input type="hidden" name="mes" value="{{ mes_atual }}">
                         <input type="hidden" name="ano" value="{{ ano_atual }}">
-                        {% csrf_token %}
-                        <input type="file" name="pdf_assinado" accept=".pdf, .p7s" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" required />
-                        <button type="submit" class="mt-4 w-full px-4 py-2 bg-blue-600 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300">
-                            Enviar Arquivo Assinado
-                        </button>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-secondary">Arquivo Assinado</label>
+                            <input type="file" name="pdf_assinado" class="form-control" accept=".pdf, .p7s" required>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary rounded-pill fw-bold py-2">
+                                <i class="fas fa-upload me-2"></i> 2. Enviar Arquivo
+                            </button>
+                        </div>
                     </form>
-                </div>
-                <div class="items-center px-4 py-3">
-                    <button id="btn-fechar-modal" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
-                        Fechar
-                    </button>
                 </div>
             </div>
         </div>
     </div>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
 
-        const body = document.body;
-        const horaEntradaPadrao = body.getAttribute('data-ent-padrao') || '08';
-        const horaSaidaPadrao = body.getAttribute('data-sai-padrao') || '18';
-        const intervaloTexto = body.getAttribute('data-intervalo') || '12:00 às 13:00';
-        
-  
-        let almocoEntrada = "12:00";
-        let almocoVolta = "13:00";
-        if (intervaloTexto.includes('às')) {
-            const parts = intervaloTexto.split('às');
-            almocoEntrada = parts[0].trim();
-            almocoVolta = parts[1].trim();
-        }
-
-        let lastRandomNum = -1;
-
-
-        function getUniqueRandom() {
-            let num;
-            do {
-                num = Math.floor(Math.random() * 5) + 1;
-            } while (num === lastRandomNum);
-            lastRandomNum = num;
-            return num;
-        }
-
-        function fillRow(row) {
-
-            if (row.classList.contains('weekend-bg')) return;
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const body = document.body;
+            const horaEntrada = body.getAttribute('data-ent-padrao') || '08';
+            const horaSaida = body.getAttribute('data-sai-padrao') || '18';
+            const intervalo = body.getAttribute('data-intervalo') || '12:00 às 13:00';
             
-            const inEnt1 = row.querySelector('input[name^="entrada_1_"]');
-            const inSai1 = row.querySelector('input[name^="saida_1_"]');
-            const inEnt2 = row.querySelector('input[name^="entrada_2_"]');
-            const inSai2 = row.querySelector('input[name^="saida_2_"]');
+            let almocoSai = "12:00";
+            let almocoVolta = "13:00";
+            if (intervalo.includes('às')) {
+                const parts = intervalo.split('às');
+                almocoSai = parts[0].trim();
+                almocoVolta = parts[1].trim();
+            }
 
+            let lastRandom = -1;
+            function getMinutes() {
+                let num;
+                do { num = Math.floor(Math.random() * 6); } while (num === lastRandom);
+                lastRandom = num;
+                return '0' + num;
+            }
 
-            if (inEnt1 && !inEnt1.disabled) {
-                const rand = getUniqueRandom();
-                const minStr = '0' + rand; 
-
-                inEnt1.value = `${horaEntradaPadrao}:${minStr}`; 
-                inSai1.value = almocoEntrada;                    
-                inEnt2.value = almocoVolta;                      
-                inSai2.value = `${horaSaidaPadrao}:${minStr}`;   
+            function preencherLinha(tr) {
+                if(tr.classList.contains('row-weekend') || 
+                   tr.classList.contains('row-feriado') || 
+                   tr.classList.contains('row-atestado-dias') || 
+                   tr.classList.contains('row-ferias') || 
+                   tr.classList.contains('row-atestado-horas')) return;
                 
+                const in1 = tr.querySelector('input[name^="entrada_1_"]');
+                const out1 = tr.querySelector('input[name^="saida_1_"]');
+                const in2 = tr.querySelector('input[name^="entrada_2_"]');
+                const out2 = tr.querySelector('input[name^="saida_2_"]');
 
-                inEnt1.dispatchEvent(new Event('change'));
+                if (in1 && !in1.disabled && !in1.value) {
+                    const min = getMinutes();
+                    in1.value = `${horaEntrada}:${min}`;
+                    out1.value = almocoSai;
+                    in2.value = almocoVolta;
+                    out2.value = `${horaSaida}:${min}`;
+                }
             }
-        }
 
-
-        const allRows = document.querySelectorAll('tbody tr');
-        
-        if (allRows.length > 0) {
-            const firstRow = allRows[0];
-            const firstInput = firstRow.querySelector('input[name^="entrada_1_"]');
-            
-            if (firstInput) {
-                let clickCount = 0;
-                let clickTimer = null;
-
-                firstInput.addEventListener('click', (e) => {
-
-                    clickCount++;
+            const primeiroInput = document.querySelector('tbody tr:first-child input[name^="entrada_1_"]');
+            if(primeiroInput) {
+                let clicks = 0;
+                let timer = null;
+                
+                primeiroInput.addEventListener('click', (e) => {
+                    clicks++;
+                    clearTimeout(timer);
+                    timer = setTimeout(() => clicks = 0, 800);
                     
-                    clearTimeout(clickTimer);
-                    clickTimer = setTimeout(() => {
-                        clickCount = 0; 
-                    }, 800);
-
-                    if (clickCount >= 5) {
+                    if(clicks >= 5) {
                         e.preventDefault();
-                        
-
-                        allRows.forEach(row => {
-                            const isWeekend = row.classList.contains('weekend-bg');
-                            const hasFeriadoText = row.innerText.includes('FERIADO');
-                            
-
-                            if (!isWeekend && !hasFeriadoText) {
-                                fillRow(row);
-                            }
-                        });
-                        
-                        clickCount = 0;
+                        document.querySelectorAll('tbody tr').forEach(tr => preencherLinha(tr));
+                        clicks = 0;
                     }
                 });
             }
-        }
-
-
-        allRows.forEach((row) => {
-            const inputEnt = row.querySelector('input[name^="entrada_1_"]');
-            if (inputEnt) {
-                inputEnt.addEventListener('dblclick', function() {
-                    if (!this.disabled) {
-                        fillRow(row);
-                    }
+            
+            document.querySelectorAll('input[name^="entrada_1_"]').forEach(input => {
+                input.addEventListener('dblclick', function() {
+                    preencherLinha(this.closest('tr'));
                 });
-            }
+            });
         });
-    });
-</script>
+    </script>
 </body>
 </html>

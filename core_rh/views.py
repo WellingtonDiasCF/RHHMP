@@ -281,13 +281,11 @@ def gerar_pdf_ponto_view(request):
     if target_func_id:
         try:
             alvo = Funcionario.objects.get(id=target_func_id)
-            # AQUI: Usa a nova verificação de RH
             if usuario_eh_rh(request.user): 
                 funcionario = alvo
             else:
                 try:
                     gestor = Funcionario.objects.get(usuario=request.user)
-                    # Verifica se é gestor da equipe Principal OU das Secundárias do alvo
                     equipes_alvo = [alvo.equipe] + list(alvo.outras_equipes.all())
                     equipes_que_lidero = gestor.equipes_lideradas.all()
                     
@@ -308,6 +306,13 @@ def gerar_pdf_ponto_view(request):
     data_inicio, data_fim = get_datas_competencia(mes, ano)
     registros_dict = {r.data.day: r for r in RegistroPonto.objects.filter(funcionario=funcionario, data__range=[data_inicio, data_fim]).order_by('data')}
     
+    # --- NOVO: BUSCA ATESTADOS PARA O PDF ---
+    atestados_periodo = Atestado.objects.filter(
+        funcionario=funcionario,
+        status='Aprovado',
+        data_inicio__lte=data_fim
+    )
+
     dias_do_mes = []
     total_horas_delta = timedelta()
     total_extras_delta = timedelta()
@@ -317,32 +322,67 @@ def gerar_pdf_ponto_view(request):
         data_atual = data_inicio + timedelta(days=i)
         registro = registros_dict.get(data_atual.day)
         
-        if registro:
-            td_normal = timedelta()
-            if registro.entrada_manha and registro.saida_almoco:
-                dt_e1 = datetime.combine(date.min, registro.entrada_manha)
-                dt_s1 = datetime.combine(date.min, registro.saida_almoco)
-                if dt_s1 > dt_e1: td_normal += (dt_s1 - dt_e1)
-            if registro.volta_almoco and registro.saida_tarde:
-                dt_e2 = datetime.combine(date.min, registro.volta_almoco)
-                dt_s2 = datetime.combine(date.min, registro.saida_tarde)
-                if dt_s2 > dt_e2: td_normal += (dt_s2 - dt_e2)
-            total_horas_delta += td_normal
-
-            td_extra = timedelta()
-            if registro.extra_entrada and registro.extra_saida:
-                dt_ex_ent = datetime.combine(date.min, registro.extra_entrada)
-                dt_ex_sai = datetime.combine(date.min, registro.extra_saida)
-                if dt_ex_sai > dt_ex_ent: td_extra = dt_ex_sai - dt_ex_ent
-            total_extras_delta += td_extra
-            
-            if td_extra.total_seconds() > 0:
-                registro.horas_extra = format_delta(td_extra)
-            else:
-                registro.horas_extra = ""
+        # Verifica Atestados
+        tipo_atestado = None
+        for atestado in atestados_periodo:
+            if atestado.tipo == 'DIAS':
+                fim = atestado.data_inicio + timedelta(days=(atestado.qtd_dias or 1) - 1)
+                if atestado.data_inicio <= data_atual <= fim:
+                    tipo_atestado = 'DIAS'
+                    break
+            elif atestado.tipo == 'HORAS' and atestado.data_inicio == data_atual:
+                tipo_atestado = 'HORAS'
 
         eh_feriado = data_atual in feriados_br
         nome_feriado = feriados_br.get(data_atual).upper() if eh_feriado else ""
+
+        # Cria Mock se não houver registro para preencher a linha do PDF
+        if not registro:
+            class MockReg:
+                entrada_manha = None
+                saida_almoco = None
+                volta_almoco = None
+                saida_tarde = None
+                extra_entrada = None
+                extra_saida = None
+                horas_extra = ""
+                observacao = ""
+            registro = MockReg()
+        
+        # Sobrescreve a observação com o Atestado
+        if tipo_atestado == 'DIAS':
+            registro.observacao = "Atestado Médico"
+        elif tipo_atestado == 'HORAS':
+            if not registro.observacao: # Só sobrescreve se tiver vazio
+                registro.observacao = "Atestado de Comparecimento"
+
+        # Cálculos de Horas (Se houver batidas no registro)
+        td_normal = timedelta()
+        if hasattr(registro, 'pk') and registro.entrada_manha and registro.saida_almoco:
+            dt_e1 = datetime.combine(date.min, registro.entrada_manha)
+            dt_s1 = datetime.combine(date.min, registro.saida_almoco)
+            if dt_s1 > dt_e1: td_normal += (dt_s1 - dt_e1)
+        if hasattr(registro, 'pk') and registro.volta_almoco and registro.saida_tarde:
+            dt_e2 = datetime.combine(date.min, registro.volta_almoco)
+            dt_s2 = datetime.combine(date.min, registro.saida_tarde)
+            if dt_s2 > dt_e2: td_normal += (dt_s2 - dt_e2)
+        total_horas_delta += td_normal
+
+        td_extra = timedelta()
+        if hasattr(registro, 'pk') and registro.extra_entrada and registro.extra_saida:
+            dt_ex_ent = datetime.combine(date.min, registro.extra_entrada)
+            dt_ex_sai = datetime.combine(date.min, registro.extra_saida)
+            if dt_ex_sai > dt_ex_ent: td_extra = dt_ex_sai - dt_ex_ent
+        total_extras_delta += td_extra
+        
+        # --- CORREÇÃO DO ERRO AttributeError ---
+        # Verificamos se há hora extra. Se sim, formatamos.
+        # Se não, e o atributo não existir (caso do Model real), criamos ele vazio.
+        if td_extra.total_seconds() > 0:
+            registro.horas_extra = format_delta(td_extra)
+        else:
+            if not hasattr(registro, 'horas_extra'):
+                registro.horas_extra = ""
 
         dias_do_mes.append({
             'data': data_atual,
@@ -392,6 +432,7 @@ def gerar_pdf_ponto_view(request):
         response.write(html_string)
     
     return response
+
 @login_required
 def folha_ponto_view(request):
     mes_atual_real, ano_atual_real = get_competencia_atual()
@@ -419,15 +460,35 @@ def folha_ponto_view(request):
 
     funcionario = None
     feriados_br = holidays.BR(state='DF', years=ano_solicitado)
+    
+    # Datas da competência
+    data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
+    
+    atestados_periodo = []
+    ferias_periodo = [] # --- NOVA LISTA ---
+
     try:
         funcionario = Funcionario.objects.get(usuario=request.user)
         if hasattr(funcionario, 'estado_sigla') and funcionario.estado_sigla:
              feriados_br = holidays.BR(state=funcionario.estado_sigla, years=ano_solicitado)
+        
+        # Busca atestados aprovados
+        atestados_periodo = Atestado.objects.filter(
+            funcionario=funcionario,
+            status='Aprovado',
+            data_inicio__lte=data_fim
+        )
+
+        # --- NOVA CONSULTA: Busca Férias que interceptam a competência ---
+        ferias_periodo = Ferias.objects.filter(
+            funcionario=funcionario,
+            data_inicio__lte=data_fim,
+            data_fim__gte=data_inicio
+        )
+
     except (Funcionario.DoesNotExist, NameError):
         pass 
 
-    data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
-    
     dias_do_mes = []
     registros_dict = {}
     is_locked = False
@@ -450,13 +511,50 @@ def folha_ponto_view(request):
         eh_feriado = data_atual in feriados_br
         nome_feriado = feriados_br.get(data_atual) if eh_feriado else ""
         
+        # --- LÓGICA DE FÉRIAS ---
+        eh_ferias = False
+        for f in ferias_periodo:
+            if f.data_inicio <= data_atual <= f.data_fim:
+                eh_ferias = True
+                break
+
+        # --- LÓGICA DE ATESTADO ---
+        tipo_atestado = None # None, 'DIAS', 'HORAS'
+        for atestado in atestados_periodo:
+            if atestado.tipo == 'DIAS':
+                fim_atestado = atestado.data_inicio + timedelta(days=(atestado.qtd_dias or 1) - 1)
+                if atestado.data_inicio <= data_atual <= fim_atestado:
+                    tipo_atestado = 'DIAS'
+                    break
+            elif atestado.tipo == 'HORAS':
+                if atestado.data_inicio == data_atual:
+                    tipo_atestado = 'HORAS'
+        
+        registro = registros_dict.get(data_atual.day)
+        
+        # Prepara texto da observação visual
+        obs_visual = ""
+        if registro and registro.observacao:
+            obs_visual = registro.observacao
+        elif eh_ferias:
+            obs_visual = "Férias" # Texto automático
+        elif eh_feriado:
+            obs_visual = "FERIADO"
+        elif tipo_atestado == 'DIAS':
+            obs_visual = "Atestado Médico"
+        elif tipo_atestado == 'HORAS':
+            obs_visual = "Atestado de Comparecimento"
+
         dias_do_mes.append({
             'data': data_atual,
             'dia_semana_nome': DIAS_SEMANA_PT[data_atual.weekday()],
             'eh_fim_de_semana': eh_fim_de_semana,
             'eh_feriado': eh_feriado,
             'nome_feriado': nome_feriado.upper() if nome_feriado else "",
-            'registro': registros_dict.get(data_atual.day) 
+            'registro': registro,
+            'tipo_atestado': tipo_atestado,
+            'eh_ferias': eh_ferias, # Nova flag para o template
+            'obs_visual': obs_visual
         })
 
     mes_anterior_num = data_inicio.month
@@ -476,7 +574,6 @@ def folha_ponto_view(request):
     }
     
     return render(request, 'core_rh/folha_ponto.html', context)
-
 def mascarar_email(email):
     if not email or '@' not in email: return email
     try:
