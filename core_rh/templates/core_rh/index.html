@@ -69,7 +69,7 @@
         .menu-card:hover {
             transform: translateY(-10px);
             box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-            color: #34495e; /* Mantém a cor do texto */
+            color: #34495e;
         }
 
         .card-icon-box {
@@ -93,7 +93,10 @@
         .card-gestor .card-icon-box { background: rgba(255, 159, 67, 0.1); color: #ff9f43; }
         .card-ponto .card-icon-box { background: #000e8d59; color: #000e8dff; }
         .card-ferias .card-icon-box { background: rgba(155, 89, 182, 0.1); color: #9b59b6; }
-        .card-contracheque .card-icon-box { background: #02b42f86; color: #027a20ff; }       
+        .card-contracheque .card-icon-box { background: #02b42f86; color: #027a20ff; }
+        
+        /* NOVO: Estilo do Card de Atestado (Vermelho Suave) */
+        .card-atestado .card-icon-box { background: rgba(231, 76, 60, 0.1); color: #e74c3c; }
 
         .card-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
         .card-desc { font-size: 0.9rem; color: #95a5a6; }
@@ -161,6 +164,26 @@
                 </a>
             </div>
 
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'meus_contracheques' %}" class="menu-card card-contracheque">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </div>
+                    <span class="card-title">Contracheque</span>
+                    <span class="card-desc">Visualize e confirme o recebimento</span>
+                </a>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'meus_atestados' %}" class="menu-card card-atestado">
+                    <div class="card-icon-box">
+                        <i class="fa-solid fa-notes-medical"></i>
+                    </div>
+                    <span class="card-title">Atestados</span>
+                    <span class="card-desc">Envie comprovantes e declarações</span>
+                </a>
+            </div>
+
             {% if tem_ferias %}
             <div class="col-12 col-md-6 col-lg-3">
                 <a href="{% url 'minhas_ferias' %}" class="menu-card card-ferias">
@@ -172,15 +195,7 @@
                 </a>
             </div>
             {% endif %}
-            <div class="col-12 col-md-6 col-lg-3">
-    <a href="{% url 'meus_contracheques' %}" class="menu-card card-contracheque">
-        <div class="card-icon-box">
-            <i class="fa-solid fa-file-invoice-dollar"></i>
-        </div>
-        <span class="card-title">Contracheque</span>
-        <span class="card-desc">Visualize e confirme o recebimento</span>
-    </a>
-</div>
+
         </div>
     </div>
 

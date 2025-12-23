@@ -16,7 +16,7 @@ from datetime import date, time, datetime, timedelta
 from calendar import monthrange 
 from django.template.loader import render_to_string 
 from django.conf import settings
-from .models import RegistroPonto, Funcionario, Equipe, Contracheque, Ferias
+from .models import RegistroPonto, Funcionario, Equipe, Contracheque, Ferias, Atestado
 from django.contrib import messages
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import update_session_auth_hash
@@ -27,6 +27,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from django.core.files.base import ContentFile
 from reportlab.lib import colors  # <--- ESSE ERA O QUE FALTAVA
+from .forms import AtestadoForm
 
 try:
     from weasyprint import HTML
@@ -627,8 +628,6 @@ def assinar_ponto_gestor(request, func_id, mes, ano):
     
     if request.FILES.get('arquivo_gestor'):
         arquivo = request.FILES['arquivo_gestor']
-        
-        
         nome_limpo = alvo.nome_completo.strip().replace(' ', '_')
         arquivo.name = f"Folha_{nome_limpo}_{mes}_{ano}_Assinada_Gestor.pdf"
         
@@ -1811,3 +1810,137 @@ def excluir_contracheque(request, cc_id):
     
     messages.success(request, f"Contracheque de {nome} removido com sucesso.")
     return redirect(request.META.get('HTTP_REFERER', '/'))
+
+@login_required
+def meus_atestados_view(request):
+    try:
+        funcionario = request.user.funcionario
+    except AttributeError:
+        return redirect('home')
+
+    if request.method == 'POST':
+        try:
+            # Captura os dados manuais para ter controle total
+            tipo = request.POST.get('tipo')
+            data = request.POST.get('data_inicio')
+            arquivo = request.FILES.get('arquivo')
+            motivo = request.POST.get('motivo')
+            
+            atestado = Atestado(
+                funcionario=funcionario,
+                tipo=tipo,
+                data_inicio=data,
+                motivo=motivo,
+                arquivo=arquivo
+            )
+            
+            if tipo == 'DIAS':
+                atestado.qtd_dias = int(request.POST.get('qtd_dias'))
+            else: # HORAS
+                atestado.hora_inicio = request.POST.get('hora_inicio')
+                atestado.hora_fim = request.POST.get('hora_fim')
+                atestado.qtd_dias = 0 # Zera dias para não dar erro
+            
+            atestado.save()
+            messages.success(request, "Documento enviado com sucesso! Aguarde análise do RH.")
+            
+        except Exception as e:
+            messages.error(request, f"Erro ao salvar: {e}")
+            
+        return redirect('meus_atestados')
+
+    # Histórico
+    lista = Atestado.objects.filter(funcionario=funcionario).order_by('-data_envio')
+    return render(request, 'core_rh/meus_atestados.html', {'lista': lista, 'funcionario': funcionario})
+
+
+# --- VIEW DO RH (LISTAGEM E AÇÃO) ---
+@login_required
+def rh_gestao_atestados(request):
+    if not usuario_eh_rh(request.user):
+        return HttpResponse("Acesso Negado", status=403)
+        
+    # Processa Aprovação/Recusa
+    if request.method == 'POST':
+        atestado_id = request.POST.get('atestado_id')
+        acao = request.POST.get('acao') # 'aprovar' ou 'recusar'
+        obs = request.POST.get('observacao_rh')
+        
+        atestado = get_object_or_404(Atestado, id=atestado_id)
+        
+        if acao == 'aprovar':
+            atestado.status = 'Aprovado'
+            atestado.observacao_rh = obs
+            atestado.save()
+            messages.success(request, f"Atestado de {atestado.funcionario.nome_completo} APROVADO.")
+        elif acao == 'recusar':
+            atestado.status = 'Recusado'
+            atestado.observacao_rh = obs
+            atestado.save()
+            messages.warning(request, f"Atestado de {atestado.funcionario.nome_completo} RECUSADO.")
+            
+        return redirect('rh_gestao_atestados')
+
+    # Filtros simples
+    status_filter = request.GET.get('status', 'Pendente')
+    lista = Atestado.objects.all().order_by('-data_envio')
+    
+    if status_filter != 'Todos':
+        lista = lista.filter(status=status_filter)
+
+    return render(request, 'core_rh/rh_gestao_atestados.html', {
+        'lista': lista,
+        'status_atual': status_filter
+    })
+@login_required
+def admin_atestados_partial_view(request):
+    """Renderiza a lista de atestados dentro da aba do Admin"""
+    if not (request.user.is_staff or usuario_eh_rh(request.user)):
+        return HttpResponse("Acesso Negado", status=403)
+
+    # Filtros
+    q = request.GET.get('q', '').strip()
+    status_filtro = request.GET.get('status', 'Pendente') # Padrão: Pendente
+
+    lista = Atestado.objects.all().select_related('funcionario').order_by('-data_envio')
+
+    if q:
+        lista = lista.filter(funcionario__nome_completo__icontains=q)
+
+    if status_filtro and status_filtro != 'Todos':
+        lista = lista.filter(status=status_filtro)
+
+    context = {
+        'lista_atestados': lista,
+        'status_atual': status_filtro,
+        'q': q
+    }
+    # Renderiza apenas o pedaço HTML (include)
+    return render(request, 'core_rh/includes/rh_atestados_moderno.html', context)
+
+@login_required
+def rh_acao_atestado(request):
+    """Processa a aprovação ou recusa vinda do Modal"""
+    if not (request.user.is_staff or usuario_eh_rh(request.user)):
+        return redirect('home')
+        
+    if request.method == 'POST':
+        atestado_id = request.POST.get('atestado_id')
+        acao = request.POST.get('acao')
+        obs = request.POST.get('observacao_rh')
+        
+        atestado = get_object_or_404(Atestado, id=atestado_id)
+        
+        if acao == 'aprovar':
+            atestado.status = 'Aprovado'
+            atestado.observacao_rh = obs
+            messages.success(request, f"Atestado de {atestado.funcionario.nome_completo} Aprovado!")
+        elif acao == 'recusar':
+            atestado.status = 'Recusado'
+            atestado.observacao_rh = obs
+            messages.warning(request, f"Atestado de {atestado.funcionario.nome_completo} Recusado.")
+            
+        atestado.save()
+        
+    # Redireciona para a mesma página (mantendo o usuário no Admin)
+    return redirect(request.META.get('HTTP_REFERER', '/admin/'))

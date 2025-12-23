@@ -13,7 +13,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from django.core.files.base import ContentFile
 from django.contrib import messages
-from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias, Contracheque
+from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias, Contracheque, Atestado
 from .forms import UploadLoteContrachequeForm
 
 # Tenta importar pypdf de forma segura
@@ -129,6 +129,8 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
         extra_context['filter_estados'] = list(estados)
         extra_context['filter_equipes'] = todas_equipes
         extra_context['json_mapa_equipes'] = json.dumps(mapa_estado_equipe)
+        if is_rh_member(request.user):
+            extra_context['total_atestados_pendentes'] = Atestado.objects.filter(status='Pendente').count()
         return super().changelist_view(request, extra_context=extra_context)
 
     def save_model(self, request, obj, form, change):

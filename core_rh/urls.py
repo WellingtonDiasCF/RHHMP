@@ -54,4 +54,8 @@ urlpatterns = [
     # NOVAS ROTAS ADICIONADAS PARA OS BOTÕES DE AÇÃO:
     path('rh/contracheque/upload/<int:func_id>/', views.upload_individual_contracheque, name='upload_individual_contracheque'),
     path('rh/contracheque/excluir/<int:cc_id>/', views.excluir_contracheque, name='excluir_contracheque'),
+    path('meus-atestados/', views.meus_atestados_view, name='meus_atestados'),
+    # ...
+    path('api/admin/atestados-partial/', views.admin_atestados_partial_view, name='admin_atestados_partial'),
+    path('rh/atestado/acao/', views.rh_acao_atestado, name='rh_acao_atestado'),
 ]

@@ -261,3 +261,37 @@ class Contracheque(models.Model):
     @property
     def assinado(self):
         return self.data_ciencia is not None
+class Atestado(models.Model):
+    TIPO_CHOICES = [
+        ('DIAS', 'Atestado Médico (Afastamento em Dias)'),
+        ('HORAS', 'Declaração de Comparecimento (Horas)'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('Pendente', 'Pendente'),
+        ('Aprovado', 'Aprovado'),
+        ('Recusado', 'Recusado'),
+    ]
+
+    funcionario = models.ForeignKey(Funcionario, on_delete=models.CASCADE, related_name='atestados')
+    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES, default='DIAS')
+    
+    # Campos comuns
+    data_inicio = models.DateField("Data do Atestado")
+    motivo = models.CharField("Motivo / CID (Opcional)", max_length=100, blank=True, null=True)
+    arquivo = models.FileField(upload_to='atestados/%Y/%m/')
+    
+    # Campos específicos para "DIAS"
+    qtd_dias = models.IntegerField("Qtd. Dias", default=1, blank=True, null=True)
+    
+    # Campos específicos para "HORAS"
+    hora_inicio = models.TimeField("Hora Início", blank=True, null=True)
+    hora_fim = models.TimeField("Hora Fim", blank=True, null=True)
+    
+    # Controle
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pendente')
+    observacao_rh = models.TextField("Obs. do RH", blank=True, null=True)
+    data_envio = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.funcionario.nome_completo} - {self.get_tipo_display()}"

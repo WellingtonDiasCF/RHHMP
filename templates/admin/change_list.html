@@ -7,11 +7,13 @@
     {% if cl.opts.model_name == 'funcionario' or cl.opts.model_name == 'equipe' %}
     <div class="d-flex justify-content-center mb-5">
         <ul class="nav nav-pills custom-nav p-1 bg-white border shadow-sm rounded-pill">
+            
             <li class="nav-item">
                 <button class="nav-link active rounded-pill px-4 fw-bold" id="tab-admin" data-bs-toggle="pill" data-bs-target="#content-admin" type="button">
                     <i class="fas fa-database me-2"></i> Administração
                 </button>
             </li>
+
             <li class="nav-item">
                 {% if cl.opts.model_name == 'equipe' %}
                     <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-ponto" type="button" onclick="setRhMode('summary'); triggerPainelRH('summary')">
@@ -23,12 +25,29 @@
                     </button>
                 {% endif %}
             </li>
+
             {% if cl.opts.model_name == 'funcionario' %}
+            
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-contracheque" type="button" onclick="triggerPainelContracheque()">
                     <i class="fas fa-file-invoice-dollar me-2"></i> Contracheque
                 </button>
             </li>
+
+            <li class="nav-item position-relative">
+                <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-atestados" type="button" onclick="triggerPainelAtestados()">
+                    <i class="fas fa-file-medical me-2"></i> Atestados
+                </button>
+                
+                {% if total_atestados_pendentes > 0 %}
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light shadow-sm" 
+                      style="z-index: 10; margin-left: -15px; margin-top: 5px; animation: pulse-red 2s infinite;">
+                    {{ total_atestados_pendentes }}
+                    <span class="visually-hidden">pendentes</span>
+                </span>
+                {% endif %}
+            </li>
+
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-4 fw-bold" data-bs-toggle="pill" data-bs-target="#content-ferias" type="button" onclick="triggerPainelFerias()">
                     <i class="fas fa-umbrella-beach me-2"></i> Férias
@@ -143,12 +162,15 @@
 
         <div class="tab-pane fade" id="content-ponto"><div id="rh-panel-container"></div></div>
         <div class="tab-pane fade" id="content-contracheque"><div id="rh-contracheque-container"></div></div>
+        
+        <div class="tab-pane fade" id="content-atestados"><div id="rh-atestados-container"></div></div>
+
         <div class="tab-pane fade" id="content-ferias"><div id="rh-ferias-container"></div></div>
     </div>
 </div>
 
 <style>
-    /* MANTIDO SEU ESTILO ORIGINAL */
+    /* ESTILOS ORIGINAIS + ANIMAÇÃO DO BADGE */
     .custom-nav .nav-link { color: #555 !important; transition: all 0.3s; background: transparent; }
     .custom-nav .nav-link:hover { background-color: #f8f9fa; color: #333 !important; }
     .custom-nav .nav-link.active { background-color: #FF6600 !important; color: white !important; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3); }
@@ -165,25 +187,41 @@
     .avatar-circle { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1rem; }
     .btn-icon:hover { background-color: #FF6600; color: white !important; }
     .action-checkbox, .action-checkbox-column, .actions, #action-toggle { display: none !important; }
+
+    /* Animação de Pulso Vermelho */
+    @keyframes pulse-red {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
 </style>
 
 <script>
     // --- FUNÇÕES DE NAVEGAÇÃO E MODAIS ---
     
-    // [NOVO] Função para abrir o modal de Upload Individual (MOVIDA PARA CÁ PARA FUNCIONAR)
+    // Função para abrir o modal de Upload Individual
     window.abrirModalIndividual = function(nome, urlAction) {
-        // Encontra o Modal que foi carregado via AJAX
         var modalEl = document.getElementById('modalUploadIndividual');
-        if(!modalEl) {
-            console.error("Modal não encontrado no DOM.");
-            return;
-        }
-
-        // Preenche os dados
+        if(!modalEl) { console.error("Modal não encontrado no DOM."); return; }
         document.getElementById('indiv_nome_func').textContent = nome;
         document.getElementById('formIndividual').action = urlAction;
+        var myModal = new bootstrap.Modal(modalEl);
+        myModal.show();
+    }
+
+    // [NOVO] Função para abrir o Modal de Análise de Atestados
+    // Esta função foi movida para cá para ficar acessível globalmente
+    window.abrirModalAnalise = function(id, nome, url) {
+        var modalEl = document.getElementById('modalAnaliseRH');
+        if(!modalEl) { 
+            console.error("Modal de análise não encontrado no DOM."); 
+            return; 
+        }
         
-        // Abre usando Bootstrap
+        document.getElementById('input-atestado-id').value = id;
+        document.getElementById('nome-func-analise').innerText = nome;
+        document.getElementById('iframe-analise').src = url;
+        
         var myModal = new bootstrap.Modal(modalEl);
         myModal.show();
     }
@@ -223,7 +261,7 @@
     window.triggerPainelRH = carregarPainelRH;
 
 
-    // --- LÓGICA DO PAINEL DE FÉRIAS (ABA 4) ---
+    // --- LÓGICA DO PAINEL DE FÉRIAS (ABA 5) ---
     window.filtrarAdminFerias = function(mes, ano) {
         const elStatus = document.getElementById('ferias-filtro-status');
         const elSearch = document.getElementById('ferias-search-input');
@@ -241,7 +279,6 @@
     function carregarPainelFerias(url) {
         const c = document.getElementById('rh-ferias-container');
         if (!url) url = "{% url 'admin_ferias_partial' %}";
-        
         c.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-warning"></div></div>';
         fetch(url).then(r => r.text()).then(html => { c.innerHTML = html; });
     }
@@ -261,13 +298,38 @@
     function carregarPainelContracheque(url) {
         const c = document.getElementById('rh-contracheque-container');
         if (!url) url = "{% url 'admin_contracheque_partial' %}";
-        
         c.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-success"></div></div>';
         fetch(url).then(r => r.text()).then(html => { c.innerHTML = html; });
     }
     window.triggerPainelContracheque = carregarPainelContracheque;
 
-    // --- LÓGICA DA ABA ADMINISTRAÇÃO ---
+    // --- [NOVO] LÓGICA DO PAINEL DE ATESTADOS (ABA 4) ---
+    window.filtrarAdminAtestados = function() {
+        const elStatus = document.getElementById('atestado-filtro-status');
+        const elSearch = document.getElementById('atestado-search-input');
+        
+        const status = elStatus ? elStatus.value : '';
+        const query = elSearch ? elSearch.value : '';
+
+        // Adiciona timestamp para forçar refresh
+        let url = `{% url 'admin_atestados_partial' %}?t=${new Date().getTime()}`; 
+        if(status) url += `&status=${encodeURIComponent(status)}`;
+        if(query) url += `&q=${encodeURIComponent(query)}`;
+
+        carregarPainelAtestados(url);
+    };
+
+    function carregarPainelAtestados(url) {
+        const c = document.getElementById('rh-atestados-container');
+        if (!url) url = "{% url 'admin_atestados_partial' %}";
+        
+        c.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-danger"></div></div>';
+        fetch(url).then(r => r.text()).then(html => { c.innerHTML = html; });
+    }
+    window.triggerPainelAtestados = carregarPainelAtestados;
+
+
+    // --- LÓGICA DA ABA ADMINISTRAÇÃO (PADRÃO) ---
     const MAPA_EQUIPES = {{ json_mapa_equipes|default:"{}"|safe }};
 
     function atualizarFiltroAdmin() {
@@ -320,6 +382,7 @@
         }
         if(selEquipe && eq) selEquipe.value = eq;
 
+        // Recupera a aba ativa do LocalStorage
         const activeTab = localStorage.getItem('activeAdminTab');
         if (activeTab) {
             const tabBtn = document.querySelector(`button[data-bs-target="${activeTab}"]`);
@@ -328,14 +391,18 @@
                 if(activeTab === '#content-ponto') triggerPainelRH(window.currentRhMode);
                 if(activeTab === '#content-ferias') triggerPainelFerias();
                 if(activeTab === '#content-contracheque') triggerPainelContracheque();
+                if(activeTab === '#content-atestados') triggerPainelAtestados();
             }
         }
+        
+        // Salva a aba ao clicar
         document.querySelectorAll('button[data-bs-toggle="pill"]').forEach(btn => {
             btn.addEventListener('shown.bs.tab', function (e) {
                 const target = e.target.getAttribute('data-bs-target');
                 localStorage.setItem('activeAdminTab', target);
                 if(target === '#content-ferias') triggerPainelFerias();
                 if(target === '#content-contracheque') triggerPainelContracheque();
+                if(target === '#content-atestados') triggerPainelAtestados();
             });
         });
     });

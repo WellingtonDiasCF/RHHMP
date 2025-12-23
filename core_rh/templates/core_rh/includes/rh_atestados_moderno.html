@@ -1,0 +1,175 @@
+<div class="rh-panel-wrapper fade-in-up">
+    
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom gap-3 bg-white p-3 rounded-4 shadow-sm">
+        
+        <div class="d-flex align-items-center gap-2">
+            <select id="atestado-filtro-status" class="form-select rounded-pill border-0 bg-light fw-bold" onchange="filtrarAdminAtestados()" style="width: 160px;">
+                <option value="Pendente" {% if status_atual == 'Pendente' %}selected{% endif %}>🔔 Pendentes</option>
+                <option value="Aprovado" {% if status_atual == 'Aprovado' %}selected{% endif %}>✅ Aprovados</option>
+                <option value="Recusado" {% if status_atual == 'Recusado' %}selected{% endif %}>❌ Recusados</option>
+                <option value="Todos" {% if status_atual == 'Todos' %}selected{% endif %}>📂 Todos</option>
+            </select>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center flex-grow-1 justify-content-end">
+            <div class="input-group shadow-sm" style="max-width: 300px;">
+                <input type="text" id="atestado-search-input" class="form-control border-end-0 ps-3 bg-white" placeholder="Buscar funcionário..." 
+                       value="{{ q }}" 
+                       onkeydown="if(event.key === 'Enter') filtrarAdminAtestados()"
+                       style="border-top-left-radius: 50px; border-bottom-left-radius: 50px;">
+                <button class="btn btn-white border-start-0 text-primary pe-3 bg-white" 
+                        onclick="filtrarAdminAtestados()"
+                        style="border-top-right-radius: 50px; border-bottom-right-radius: 50px;">
+                        <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0 table-hover">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4 py-3 text-secondary text-uppercase text-xs fw-bold">Funcionário</th>
+                        <th class="py-3 text-secondary text-uppercase text-xs fw-bold">Detalhes do Afastamento</th>
+                        <th class="text-center py-3 text-secondary text-uppercase text-xs fw-bold">Anexo</th>
+                        <th class="text-center py-3 text-secondary text-uppercase text-xs fw-bold">Status</th>
+                        <th class="text-end pe-4 py-3 text-secondary text-uppercase text-xs fw-bold">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in lista_atestados %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="d-flex flex-column">
+                                <span class="fw-bold text-dark">{{ item.funcionario.nome_completo }}</span>
+                                <small class="text-muted">Enviado: {{ item.data_envio|date:"d/m/Y H:i" }}</small>
+                            </div>
+                        </td>
+                        
+                        <td>
+                            <div class="d-flex flex-column">
+                                {% if item.tipo == 'DIAS' %}
+                                    <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill w-auto align-self-start mb-1">
+                                        <i class="fas fa-bed me-1"></i> {{ item.qtd_dias }} dia(s)
+                                    </span>
+                                    <span class="small fw-bold text-dark">Data: {{ item.data_inicio|date:"d/m/Y" }}</span>
+                                {% else %}
+                                    <span class="badge bg-info-subtle text-info border border-info rounded-pill w-auto align-self-start mb-1">
+                                        <i class="fas fa-clock me-1"></i> Declaração
+                                    </span>
+                                    <span class="small fw-bold text-dark">{{ item.data_inicio|date:"d/m/Y" }} • {{ item.hora_inicio|time:"H:i" }} - {{ item.hora_fim|time:"H:i" }}</span>
+                                {% endif %}
+                                
+                                {% if item.motivo %}
+                                    <small class="text-muted fst-italic mt-1 text-truncate" style="max-width: 250px;">"{{ item.motivo }}"</small>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <td class="text-center">
+                            <a href="{{ item.arquivo.url }}" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill fw-bold px-3 shadow-sm">
+                                <i class="fas fa-eye me-1"></i> Ver
+                            </a>
+                        </td>
+
+                        <td class="text-center">
+                            {% if item.status == 'Pendente' %}
+                                <span class="badge bg-warning text-dark rounded-pill px-3 shadow-sm">Pendente</span>
+                            {% elif item.status == 'Aprovado' %}
+                                <span class="badge bg-success rounded-pill px-3 shadow-sm">Aprovado</span>
+                            {% else %}
+                                <span class="badge bg-danger rounded-pill px-3 shadow-sm">Recusado</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-end pe-4">
+                            {% if item.status == 'Pendente' %}
+                                <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm"
+                                        onclick="abrirModalAnalise('{{ item.id }}', '{{ item.funcionario.nome_completo }}', '{{ item.arquivo.url }}')">
+                                    <i class="fas fa-gavel me-1"></i> Avaliar
+                                </button>
+                            {% else %}
+                                <button class="btn btn-light btn-sm border rounded-pill px-3 text-muted" disabled>
+                                    <i class="fas fa-check"></i> Processado
+                                </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            <i class="fas fa-folder-open fa-2x mb-3 opacity-25"></i><br>
+                            Nenhum atestado encontrado neste filtro.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalAnaliseRH" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-clipboard-check me-2 text-primary"></i> Avaliação de Atestado</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row">
+                        <div class="col-lg-7 mb-3 mb-lg-0">
+                            <div class="bg-light rounded-3 d-flex align-items-center justify-content-center overflow-hidden border shadow-inner" style="height: 500px;">
+                                <iframe id="iframe-analise" src="" width="100%" height="100%" style="border:none;"></iframe>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-5 d-flex flex-column">
+                            <div class="bg-light p-3 rounded-3 mb-3 border">
+                                <small class="text-muted text-uppercase fw-bold">Funcionário</small>
+                                <h5 class="fw-bold mb-0 text-dark" id="nome-func-analise">Carregando...</h5>
+                            </div>
+                            
+                            <form action="{% url 'rh_acao_atestado' %}" method="post" class="flex-grow-1 d-flex flex-column">
+                                {% csrf_token %}
+                                <input type="hidden" name="atestado_id" id="input-atestado-id">
+                                
+                                <div class="mb-3">
+                                    <label class="fw-bold small mb-2 text-muted">Observação (Obrigatório se recusar)</label>
+                                    <textarea name="observacao_rh" class="form-control bg-white border" rows="5" placeholder="Ex: CID ilegível, data não confere com ponto, aprovado..."></textarea>
+                                </div>
+
+                                <div class="mt-auto d-grid gap-2">
+                                    <button type="submit" name="acao" value="aprovar" class="btn btn-success py-3 rounded-pill fw-bold shadow-sm">
+                                        <i class="fas fa-check-circle me-2"></i> APROVAR ATESTADO
+                                    </button>
+                                    <button type="submit" name="acao" value="recusar" class="btn btn-outline-danger py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-times-circle me-2"></i> Recusar Documento
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function abrirModalAnalise(id, nome, url) {
+        document.getElementById('input-atestado-id').value = id;
+        document.getElementById('nome-func-analise').innerText = nome;
+        document.getElementById('iframe-analise').src = url;
+        
+        var myModal = new bootstrap.Modal(document.getElementById('modalAnaliseRH'));
+        myModal.show();
+    }
+</script>
+
+<style>
+    .fade-in-up { animation: fadeInUp 0.4s ease-out; }
+    .btn-white { background-color: #fff; border: none; }
+    .btn-white:hover { background-color: #f8f9fa; }
+</style>
