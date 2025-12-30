@@ -8,7 +8,6 @@
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -19,13 +18,11 @@
             min-height: 100vh;
         }
 
-        /* --- Navbar (Padrão Escuro - Igual Contracheque/Gestor) --- */
         .navbar-custom {
             background: linear-gradient(to right, #1a1a1a, #333);
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
 
-        /* --- Layout --- */
         .page-container {
             max-width: 1400px;
             margin: 0 auto;
@@ -45,16 +42,27 @@
             gap: 15px;
         }
 
-        /* --- Tabela Moderna (Estilo "Minha Equipe") --- */
+        @media (max-width: 768px) {
+            .header-box {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+            .header-box .d-flex {
+                justify-content: center;
+            }
+        }
+
+        /* Tabela Responsiva */
         .table-custom thead th {
             background-color: #f8fafc;
             color: #64748b;
             font-weight: 600;
             text-transform: uppercase;
             font-size: 0.75rem;
-            letter-spacing: 0.5px;
             padding: 15px 20px;
             border-bottom: 2px solid #e2e8f0;
+            white-space: nowrap; /* Evita quebra de linha no cabeçalho */
         }
         
         .table-custom tbody td {
@@ -62,36 +70,22 @@
             vertical-align: middle;
             border-bottom: 1px solid #f1f5f9;
             background: #fff;
-        }
-        
-        .table-hover tbody tr:hover td {
-            background-color: #f8fbff;
+            white-space: nowrap; /* Mantém linhas uniformes no scroll horizontal */
         }
 
-        /* --- Badges Soft (Estilo Gestor) --- */
         .badge-soft-success { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
         .badge-soft-warning { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
         .badge-soft-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
         .badge-soft-primary { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
         .badge-soft-info { background-color: #cffafe; color: #155e75; border: 1px solid #a5f3fc; }
 
-        /* --- Botões e Cards de Seleção --- */
         .btn-check:checked + .btn-outline-primary {
             background-color: #fff5eb;
             border-color: #FF6600;
             color: #FF6600;
             box-shadow: 0 0 0 2px #FF6600;
         }
-        .btn-outline-primary {
-            border: 2px solid #e9ecef;
-            color: #6c757d;
-            transition: all 0.2s;
-        }
-        .btn-outline-primary:hover {
-            background-color: #f8f9fa;
-            border-color: #dee2e6;
-            color: #333;
-        }
+        .btn-outline-primary { border: 2px solid #e9ecef; color: #6c757d; }
     </style>
 </head>
 <body>
@@ -99,13 +93,11 @@
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold" href="{% url 'home' %}">
-                <i class="fas fa-file-invoice-dollar me-2 text-warning"></i> Portal RH <span class="fw-light text-white-50">| Financeiro</span>
+                <i class="fas fa-file-invoice-dollar me-2 text-warning"></i> Portal RH <span class="fw-light text-white-50"></span>
             </a>
             <div class="d-flex align-items-center gap-3">
                 <span class="text-white small d-none d-md-block">Olá, {{ request.user.first_name }}</span>
-                <a href="{% url 'home' %}" class="btn btn-sm btn-outline-light rounded-pill px-3">
-                    <i class="fas fa-home me-1"></i> Início
-                </a>
+                <a href="{% url 'home' %}" class="btn btn-sm btn-outline-light rounded-pill px-3">Início</a>
             </div>
         </div>
     </nav>
@@ -118,9 +110,7 @@
                 <p class="text-muted small mb-0">Gerencie seus envios de atestados médicos e declarações.</p>
             </div>
             <div class="d-flex gap-2">
-                <a href="{% url 'home' %}" class="btn btn-outline-secondary rounded-pill px-4 fw-bold shadow-sm">
-                    <i class="fas fa-arrow-left me-2"></i> Voltar
-                </a>
+                <a href="{% url 'home' %}" class="btn btn-outline-secondary rounded-pill px-4 fw-bold shadow-sm">Voltar</a>
                 <button class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNovoAtestado">
                     <i class="fas fa-plus-circle me-2"></i> Novo Envio
                 </button>
@@ -129,9 +119,9 @@
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'success' %}success{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4" role="alert">
-                    <i class="fas fa-{% if message.tags == 'success' %}check-circle{% else %}exclamation-triangle{% endif %} me-2"></i> {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <div class="alert alert-{% if message.tags == 'success' %}success{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4">
+                    <i class="fas fa-info-circle me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             {% endfor %}
         {% endif %}
@@ -142,7 +132,7 @@
                     <thead>
                         <tr>
                             <th class="ps-4">Tipo</th>
-                            <th>Data de Referência</th>
+                            <th>Data</th>
                             <th>Duração</th>
                             <th class="text-center">Status</th>
                             <th class="text-end pe-4">Arquivo</th>
@@ -153,18 +143,12 @@
                         <tr>
                             <td class="ps-4">
                                 {% if item.tipo == 'DIAS' %}
-                                    <span class="badge rounded-pill badge-soft-primary px-3 py-2">
-                                        <i class="fas fa-bed me-1"></i> Afastamento
-                                    </span>
+                                    <span class="badge rounded-pill badge-soft-primary px-3 py-2"><i class="fas fa-bed me-1"></i> Afastamento</span>
                                 {% else %}
-                                    <span class="badge rounded-pill badge-soft-info px-3 py-2">
-                                        <i class="fas fa-user-clock me-1"></i> Declaração
-                                    </span>
+                                    <span class="badge rounded-pill badge-soft-info px-3 py-2"><i class="fas fa-user-clock me-1"></i> Declaração</span>
                                 {% endif %}
                             </td>
-                            <td class="fw-bold text-dark">
-                                {{ item.data_inicio|date:"d/m/Y" }}
-                            </td>
+                            <td class="fw-bold text-dark">{{ item.data_inicio|date:"d/m/Y" }}</td>
                             <td class="text-muted small fw-bold">
                                 {% if item.tipo == 'DIAS' %}
                                     {{ item.qtd_dias }} dia(s)
@@ -176,13 +160,13 @@
                                 {% if item.status == 'Aprovado' %}
                                     <span class="badge rounded-pill badge-soft-success px-3 py-2">Aprovado</span>
                                 {% elif item.status == 'Recusado' %}
-                                    <span class="badge rounded-pill badge-soft-danger px-3 py-2" title="{{ item.observacao_rh }}">Recusado</span>
+                                    <span class="badge rounded-pill badge-soft-danger px-3 py-2">Recusado</span>
                                 {% else %}
                                     <span class="badge rounded-pill badge-soft-warning px-3 py-2">Pendente</span>
                                 {% endif %}
                             </td>
                             <td class="text-end pe-4">
-                                <a href="{{ item.arquivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill fw-bold px-3 shadow-sm" title="Ver Arquivo">
+                                <a href="{{ item.arquivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill fw-bold px-3 shadow-sm">
                                     <i class="fas fa-eye me-1"></i> Ver
                                 </a>
                             </td>
@@ -205,74 +189,61 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4">
                 <div class="modal-header border-0 pb-0 pt-4 px-4">
-                    <h5 class="modal-title fw-bold text-dark">
-                        <i class="fas fa-file-medical me-2 text-warning"></i> Enviar Documento
-                    </h5>
+                    <h5 class="modal-title fw-bold text-dark">Enviar Documento</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4">
                     <form method="post" enctype="multipart/form-data">
                         {% csrf_token %}
-                        
-                        <label class="fw-bold small mb-2 text-muted">Qual o tipo do documento?</label>
                         <div class="row g-2 mb-4">
                             <div class="col-6">
                                 <input type="radio" class="btn-check" name="tipo" id="tipoDias" value="DIAS" checked onchange="toggleFormulario()">
-                                <label class="btn btn-outline-primary w-100 py-3 rounded-3 border-2 h-100 d-flex flex-column align-items-center justify-content-center" for="tipoDias">
-                                    <i class="fas fa-bed fa-2x mb-2"></i>
-                                    <span class="fw-bold small">Atestado Médico</span>
+                                <label class="btn btn-outline-primary w-100 py-3 rounded-3" for="tipoDias">
+                                    <i class="fas fa-bed fa-2x mb-2 d-block"></i> Atestado Médico
                                 </label>
                             </div>
                             <div class="col-6">
                                 <input type="radio" class="btn-check" name="tipo" id="tipoHoras" value="HORAS" onchange="toggleFormulario()">
-                                <label class="btn btn-outline-primary w-100 py-3 rounded-3 border-2 h-100 d-flex flex-column align-items-center justify-content-center" for="tipoHoras">
-                                    <i class="fas fa-user-clock fa-2x mb-2"></i>
-                                    <span class="fw-bold small">Atestado Comparecimento</span>
+                                <label class="btn btn-outline-primary w-100 py-3 rounded-3" for="tipoHoras">
+                                    <i class="fas fa-user-clock fa-2x mb-2 d-block"></i> Comparecimento
                                 </label>
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="fw-bold small mb-1">Data do Atestado</label>
+                            <label class="fw-bold small mb-1">Data</label>
                             <input type="date" name="data_inicio" class="form-control bg-light border-0 py-2" required>
                         </div>
 
                         <div id="divDias" class="mb-3">
-                            <label class="fw-bold small mb-1">Quantidade de Dias</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-white border-end-0"><i class="fas fa-calendar-day text-muted"></i></span>
-                                <input type="number" name="qtd_dias" class="form-control bg-light border-start-0 py-2" value="1" min="1">
-                            </div>
+                            <label class="fw-bold small mb-1">Qtd. Dias</label>
+                            <input type="number" name="qtd_dias" class="form-control bg-light border-0 py-2" value="1" min="1">
                         </div>
 
                         <div id="divHoras" class="mb-3 d-none">
-                            <div class="row">
+                            <div class="row g-2">
                                 <div class="col-6">
-                                    <label class="fw-bold small mb-1">Hora Início</label>
+                                    <label class="fw-bold small mb-1">Início</label>
                                     <input type="time" name="hora_inicio" class="form-control bg-light border-0 py-2">
                                 </div>
                                 <div class="col-6">
-                                    <label class="fw-bold small mb-1">Hora Fim</label>
+                                    <label class="fw-bold small mb-1">Fim</label>
                                     <input type="time" name="hora_fim" class="form-control bg-light border-0 py-2">
                                 </div>
                             </div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="fw-bold small mb-1">Motivo / CID (Opcional)</label>
-                            <input type="text" name="motivo" class="form-control bg-light border-0 py-2" placeholder="Ex: Consulta Médica, Gripe...">
+                            <label class="fw-bold small mb-1">Motivo (Opcional)</label>
+                            <input type="text" name="motivo" class="form-control bg-light border-0 py-2">
                         </div>
 
                         <div class="mb-4">
-                            <label class="fw-bold small mb-1">Foto ou PDF</label>
+                            <label class="fw-bold small mb-1">Arquivo</label>
                             <input type="file" name="arquivo" class="form-control bg-light border-0" accept=".pdf, .jpg, .jpeg, .png" required>
                         </div>
 
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-warning w-100 py-3 rounded-pill fw-bold shadow-sm">
-                                <i class="fas fa-paper-plane me-2"></i> Confirmar Envio
-                            </button>
-                        </div>
+                        <button type="submit" class="btn btn-warning w-100 py-3 rounded-pill fw-bold shadow-sm">Confirmar Envio</button>
                     </form>
                 </div>
             </div>
@@ -285,23 +256,19 @@
             const isDias = document.getElementById('tipoDias').checked;
             const divDias = document.getElementById('divDias');
             const divHoras = document.getElementById('divHoras');
-            
             const inputQtd = divDias.querySelector('input');
-            const inputInicio = divHoras.querySelector('input[name="hora_inicio"]');
-            const inputFim = divHoras.querySelector('input[name="hora_fim"]');
+            const inputsHoras = divHoras.querySelectorAll('input');
 
             if (isDias) {
                 divDias.classList.remove('d-none');
                 divHoras.classList.add('d-none');
                 inputQtd.required = true;
-                inputInicio.required = false;
-                inputFim.required = false;
+                inputsHoras.forEach(i => i.required = false);
             } else {
                 divDias.classList.add('d-none');
                 divHoras.classList.remove('d-none');
                 inputQtd.required = false;
-                inputInicio.required = true;
-                inputFim.required = true;
+                inputsHoras.forEach(i => i.required = true);
             }
         }
     </script>

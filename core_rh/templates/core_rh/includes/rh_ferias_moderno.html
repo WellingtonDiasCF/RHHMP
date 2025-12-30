@@ -56,7 +56,7 @@
                         <th class="text-center py-3 text-secondary text-uppercase text-xs fw-bold">Período Aquisitivo</th>
                         <th class="text-center py-3 text-secondary text-uppercase text-xs fw-bold">Datas de Gozo</th>
                         <th class="text-center py-3 text-secondary text-uppercase text-xs fw-bold">Status</th>
-                        <th class="text-end pe-4 py-3 text-secondary text-uppercase text-xs fw-bold">Documentos</th>
+                        <th class="text-end pe-4 py-3 text-secondary text-uppercase text-xs fw-bold">Documentos & Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -139,6 +139,14 @@
                                 {% endif %}
 
                                 <div class="vr mx-1"></div>
+
+                                {% if item.status != 'Concluido' %}
+                                    {% if item.aviso_assinado or item.recibo_assinado %}
+                                        <a href="{% url 'admin:ferias_aprovar' item.id %}" class="btn btn-sm btn-success rounded-pill px-3 fw-bold text-white shadow-sm" title="Aprovar e Concluir">
+                                            Aprovar
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
 
                                 <a href="{% url 'admin:core_rh_ferias_change' item.id %}" class="btn btn-sm btn-light border rounded-pill fw-bold" title="Editar / Upload">
                                     <i class="fas fa-pen"></i>

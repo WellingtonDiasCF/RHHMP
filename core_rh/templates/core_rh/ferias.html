@@ -24,7 +24,7 @@
             font-family: 'Inter', sans-serif;
             color: var(--text-main);
             min-height: 100vh;
-            padding-bottom: 60px;
+            padding-bottom: 80px; /* Espaço extra no rodapé */
         }
 
         /* --- CABEÇALHO --- */
@@ -51,6 +51,9 @@
             font-weight: 600;
             transition: all 0.2s ease;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
         }
         .btn-back:hover {
             background: var(--primary-color);
@@ -85,7 +88,7 @@
         }
 
         .periodo-label {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             color: #888;
@@ -96,6 +99,7 @@
             font-size: 1.4rem;
             font-weight: 800;
             color: #2c3e50;
+            line-height: 1.2;
         }
 
         /* --- BADGES DE STATUS --- */
@@ -107,6 +111,7 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
+            white-space: nowrap;
         }
         .bg-pendente { background: #fff3cd; color: #856404; }
         .bg-enviado { background: #cce5ff; color: #004085; }
@@ -120,6 +125,8 @@
             height: 100%;
             border: 1px solid transparent;
             transition: border-color 0.2s;
+            display: flex;
+            flex-direction: column;
         }
         .doc-section:hover {
             border-color: #ffdec2;
@@ -138,6 +145,7 @@
         .icon-box {
             width: 40px;
             height: 40px;
+            min-width: 40px; /* Impede encolhimento */
             background: white;
             border-radius: 10px;
             display: flex;
@@ -155,13 +163,14 @@
             font-weight: 600;
             border-radius: 10px;
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             transition: all 0.2s;
             text-align: left;
             display: flex;
             align-items: center;
             justify-content: space-between;
             text-decoration: none;
+            margin-bottom: 8px;
         }
         .btn-download:hover {
             border-color: var(--primary-color);
@@ -176,8 +185,8 @@
             font-weight: 600;
             border-radius: 10px;
             width: 100%;
-            padding: 12px;
-            margin-top: 10px;
+            padding: 14px;
+            margin-top: auto; /* Empurra para o fundo se houver espaço */
             transition: background 0.2s;
             box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3);
         }
@@ -197,7 +206,7 @@
         .upload-zone {
             border: 2px dashed #ced4da;
             border-radius: 16px;
-            padding: 30px;
+            padding: 30px 15px;
             text-align: center;
             background: #fdfdfd;
             cursor: pointer;
@@ -216,20 +225,41 @@
             cursor: pointer;
         }
         
+        /* RESPONSIVIDADE AVANÇADA */
         @media (max-width: 768px) {
-            .periodo-value { font-size: 1.1rem; }
-            .card-header-styled { flex-direction: column; align-items: flex-start; }
-            .status-badge { align-self: flex-start; }
+            .navbar-custom .container { padding: 0 15px; }
+            .brand-text { font-size: 1.25rem; }
+            
+            .card-header-styled {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 20px;
+            }
+            .periodo-value { font-size: 1.2rem; margin-bottom: 5px; }
+            
+            /* No mobile, o badge fica melhor alinhado à esquerda ou ocupando linha própria */
+            .status-badge {
+                align-self: flex-start;
+                margin-top: 5px;
+            }
+            
+            /* Ajuste de padding interno do card */
+            .card-body { padding: 20px !important; }
+            
+            /* Botões mais altos para toque */
+            .btn-download, .btn-upload {
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <nav class="navbar navbar-custom sticky-top mb-5">
+    <nav class="navbar navbar-custom sticky-top mb-4 mb-md-5">
         <div class="container">
             <div class="d-flex align-items-center gap-3">
                 <a href="{% url 'home' %}" class="btn-back">
-                    <i class="fas fa-chevron-left me-1"></i> Voltar
+                    <i class="fas fa-chevron-left me-1"></i> <span class="d-none d-sm-inline">Voltar</span>
                 </a>
                 <span class="brand-text ms-2">Minhas Férias</span>
             </div>
@@ -257,11 +287,12 @@
                     <div class="ferias-card">
                         
                         <div class="card-header-styled">
-                            <div>
+                            <div class="flex-grow-1">
                                 <div class="periodo-label">Período Aquisitivo</div>
                                 <div class="periodo-value">{{ item.periodo_aquisitivo }}</div>
-                                <div class="text-muted mt-1 small">
-                                    <i class="far fa-calendar me-1"></i> Gozo: {{ item.data_inicio|date:"d/m/Y" }} a {{ item.data_fim|date:"d/m/Y" }}
+                                <div class="text-muted mt-2 small fw-bold">
+                                    <i class="far fa-calendar-alt me-1 text-primary"></i> 
+                                    Gozo: <span class="text-dark">{{ item.data_inicio|date:"d/m/Y" }}</span> até <span class="text-dark">{{ item.data_fim|date:"d/m/Y" }}</span>
                                 </div>
                             </div>
 
@@ -284,38 +315,37 @@
                                             Aviso de Férias
                                         </div>
 
-                                        <div class="d-flex flex-column gap-2">
+                                        <div class="d-flex flex-column flex-grow-1">
                                             {% if item.arquivo_aviso %}
                                                 <a href="{{ item.arquivo_aviso.url }}" target="_blank" class="btn-download" title="Baixar documento original">
-                                                    <span><i class="fas fa-cloud-download-alt me-2 text-muted"></i> Baixar PDF</span>
+                                                    <span><i class="fas fa-cloud-download-alt me-2 text-primary"></i> Baixar PDF</span>
                                                     <i class="fas fa-chevron-right text-muted small"></i>
                                                 </a>
                                                 
-                                                <button type="button" class="btn-upload" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#modalUpload{{ item.id }}"
-                                                        onclick="setUploadType('aviso', {{ item.id }})">
-                                                    <i class="fas fa-cloud-upload-alt me-2"></i> Enviar Assinado
-                                                </button>
+                                                {% if item.aviso_assinado %}
+                                                    <div class="mt-auto pt-3 border-top d-flex align-items-center text-success small fw-bold">
+                                                        <i class="fas fa-check-double me-2"></i> 
+                                                        <span>Enviado</span>
+                                                        <a href="{{ item.aviso_assinado.url }}" target="_blank" class="ms-auto btn btn-sm btn-outline-success rounded-pill px-3">Ver</a>
+                                                    </div>
+                                                {% else %}
+                                                    <button type="button" class="btn-upload" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#modalUpload{{ item.id }}"
+                                                            onclick="setUploadType('aviso', {{ item.id }})">
+                                                        <i class="fas fa-cloud-upload-alt me-2"></i> Enviar Assinado
+                                                    </button>
+                                                {% endif %}
 
                                             {% else %}
-                                                <button disabled class="btn-download opacity-50" style="cursor: not-allowed;">
-                                                    <span><i class="fas fa-clock me-2"></i> Aguardando arquivo do RH...</span>
-                                                </button>
-                                                
+                                                <div class="flex-grow-1 d-flex align-items-center justify-content-center text-center p-3 text-muted small">
+                                                    <i class="fas fa-clock me-2"></i> Aguardando documento do RH...
+                                                </div>
                                                 <button disabled class="btn-upload">
-                                                    <i class="fas fa-lock me-2"></i> Aguardando RH
+                                                    <i class="fas fa-lock me-2"></i> Indisponível
                                                 </button>
                                             {% endif %}
                                         </div>
-
-                                        {% if item.aviso_assinado %}
-                                            <div class="mt-3 pt-3 border-top d-flex align-items-center text-success small fw-bold">
-                                                <i class="fas fa-check-double me-2"></i> 
-                                                <span>Enviado com sucesso</span>
-                                                <a href="{{ item.aviso_assinado.url }}" target="_blank" class="ms-auto text-decoration-none fw-bold text-success">Ver</a>
-                                            </div>
-                                        {% endif %}
                                     </div>
                                 </div>
 
@@ -326,38 +356,37 @@
                                             Recibo de Férias
                                         </div>
 
-                                        <div class="d-flex flex-column gap-2">
+                                        <div class="d-flex flex-column flex-grow-1">
                                             {% if item.arquivo_recibo %}
                                                 <a href="{{ item.arquivo_recibo.url }}" target="_blank" class="btn-download">
-                                                    <span><i class="fas fa-cloud-download-alt me-2 text-muted"></i> Baixar PDF</span>
+                                                    <span><i class="fas fa-cloud-download-alt me-2 text-primary"></i> Baixar PDF</span>
                                                     <i class="fas fa-chevron-right text-muted small"></i>
                                                 </a>
 
-                                                <button type="button" class="btn-upload" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#modalUpload{{ item.id }}"
-                                                        onclick="setUploadType('recibo', {{ item.id }})">
-                                                    <i class="fas fa-cloud-upload-alt me-2"></i> Enviar Assinado
-                                                </button>
+                                                {% if item.recibo_assinado %}
+                                                    <div class="mt-auto pt-3 border-top d-flex align-items-center text-success small fw-bold">
+                                                        <i class="fas fa-check-double me-2"></i> 
+                                                        <span>Enviado</span>
+                                                        <a href="{{ item.recibo_assinado.url }}" target="_blank" class="ms-auto btn btn-sm btn-outline-success rounded-pill px-3">Ver</a>
+                                                    </div>
+                                                {% else %}
+                                                    <button type="button" class="btn-upload" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#modalUpload{{ item.id }}"
+                                                            onclick="setUploadType('recibo', {{ item.id }})">
+                                                        <i class="fas fa-cloud-upload-alt me-2"></i> Enviar Assinado
+                                                    </button>
+                                                {% endif %}
 
                                             {% else %}
-                                                <button disabled class="btn-download opacity-50" style="cursor: not-allowed;">
-                                                    <span><i class="fas fa-clock me-2"></i> Aguardando arquivo do RH...</span>
-                                                </button>
-
+                                                <div class="flex-grow-1 d-flex align-items-center justify-content-center text-center p-3 text-muted small">
+                                                    <i class="fas fa-clock me-2"></i> Aguardando documento do RH...
+                                                </div>
                                                 <button disabled class="btn-upload">
-                                                    <i class="fas fa-lock me-2"></i> Aguardando RH
+                                                    <i class="fas fa-lock me-2"></i> Indisponível
                                                 </button>
                                             {% endif %}
                                         </div>
-
-                                        {% if item.recibo_assinado %}
-                                            <div class="mt-3 pt-3 border-top d-flex align-items-center text-success small fw-bold">
-                                                <i class="fas fa-check-double me-2"></i> 
-                                                <span>Enviado com sucesso</span>
-                                                <a href="{{ item.recibo_assinado.url }}" target="_blank" class="ms-auto text-decoration-none fw-bold text-success">Ver</a>
-                                            </div>
-                                        {% endif %}
                                     </div>
                                 </div>
 
@@ -375,28 +404,30 @@
                                 <div class="modal-body p-4 pt-2">
                                     <form action="{% url 'upload_ferias' item.id %}" method="post" enctype="multipart/form-data">
                                         {% csrf_token %}
-                                        <p class="text-muted small ms-2 mb-4">Selecione o arquivo assinado.</p>
+                                        <p class="text-muted small ms-2 mb-4">Selecione o arquivo assinado (PDF ou Foto) para enviar ao RH.</p>
                                         
                                         <div id="upload-aviso-container-{{ item.id }}" class="mb-3 d-none upload-field">
                                             <label class="d-block fw-bold mb-2 text-dark">Aviso de Férias</label>
                                             <div class="upload-zone" id="drop-zone-aviso-{{ item.id }}">
-                                                <input type="file" name="aviso_file" onchange="updateFileName(this, 'label-aviso-{{ item.id }}')">
+                                                <input type="file" name="aviso_file" onchange="updateFileName(this, 'label-aviso-{{ item.id }}')" accept=".pdf, .jpg, .jpeg, .png">
                                                 <i class="fas fa-cloud-upload-alt fa-2x text-primary mb-2"></i>
-                                                <div id="label-aviso-{{ item.id }}" class="fw-bold text-muted small">Clique ou arraste o arquivo</div>
+                                                <div id="label-aviso-{{ item.id }}" class="fw-bold text-muted small">Clique para selecionar</div>
                                             </div>
                                         </div>
 
                                         <div id="upload-recibo-container-{{ item.id }}" class="mb-3 d-none upload-field">
                                             <label class="d-block fw-bold mb-2 text-dark">Recibo de Férias</label>
                                             <div class="upload-zone" id="drop-zone-recibo-{{ item.id }}">
-                                                <input type="file" name="recibo_file" onchange="updateFileName(this, 'label-recibo-{{ item.id }}')">
+                                                <input type="file" name="recibo_file" onchange="updateFileName(this, 'label-recibo-{{ item.id }}')" accept=".pdf, .jpg, .jpeg, .png">
                                                 <i class="fas fa-cloud-upload-alt fa-2x text-primary mb-2"></i>
-                                                <div id="label-recibo-{{ item.id }}" class="fw-bold text-muted small">Clique ou arraste o arquivo</div>
+                                                <div id="label-recibo-{{ item.id }}" class="fw-bold text-muted small">Clique para selecionar</div>
                                             </div>
                                         </div>
 
                                         <div class="d-grid mt-4">
-                                            <button type="submit" class="btn btn-primary py-3 fw-bold rounded-pill" style="background: var(--primary-color); border:none;">Confirmar Envio</button>
+                                            <button type="submit" class="btn btn-primary py-3 fw-bold rounded-pill shadow-sm" style="background: var(--primary-color); border:none;">
+                                                <i class="fas fa-paper-plane me-2"></i> Confirmar Envio
+                                            </button>
                                         </div>
                                     </form>
                                 </div>
@@ -412,7 +443,7 @@
                     <i class="fas fa-umbrella-beach fa-4x text-muted opacity-25"></i>
                 </div>
                 <h3 class="fw-bold text-secondary">Tudo tranquilo!</h3>
-                <p class="text-muted">Nenhuma férias registrada no momento.</p>
+                <p class="text-muted text-center">Nenhum registro de férias encontrado no momento.</p>
                 <a href="{% url 'home' %}" class="btn btn-outline-primary rounded-pill px-4 mt-2">Voltar ao Início</a>
             </div>
         {% endif %}
@@ -421,10 +452,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function setUploadType(type, id) {
+            // Esconde todos os campos primeiro
             document.querySelectorAll(`#modalUpload${id} .upload-field`).forEach(el => {
                 el.classList.add('d-none');
                 el.querySelector('input').required = false;
             });
+            // Mostra o específico
             if (type === 'aviso') {
                 const el = document.getElementById(`upload-aviso-container-${id}`);
                 el.classList.remove('d-none');
@@ -435,14 +468,19 @@
                 el.querySelector('input').required = true;
             }
         }
+
         function updateFileName(input, labelId) {
             const label = document.getElementById(labelId);
             if (input.files && input.files.length > 0) {
-                label.innerHTML = `<span class="text-success fw-bold"><i class="fas fa-check me-1"></i> ${input.files[0].name}</span>`;
+                const fileName = input.files[0].name;
+                // Trunca nome longo se necessário no mobile
+                const displayName = fileName.length > 25 ? fileName.substring(0, 22) + '...' : fileName;
+                
+                label.innerHTML = `<span class="text-success fw-bold"><i class="fas fa-check me-1"></i> ${displayName}</span>`;
                 input.parentElement.style.borderColor = "#198754";
                 input.parentElement.style.backgroundColor = "#f0fff4";
             } else {
-                label.innerHTML = "Clique ou arraste o arquivo";
+                label.innerHTML = "Clique para selecionar";
                 input.parentElement.style.borderColor = "#ced4da";
                 input.parentElement.style.backgroundColor = "#fdfdfd";
             }

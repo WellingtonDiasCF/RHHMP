@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Despesas</title>
+    <style>
+        @page {
+            size: A4 landscape; /* Paisagem para caber melhor as colunas */
+            margin: 1cm;
+            @bottom-right {
+                content: "Pág. " counter(page);
+                font-family: Helvetica, sans-serif;
+                font-size: 9pt;
+            }
+        }
+        body {
+            font-family: 'Helvetica', sans-serif;
+            font-size: 9pt;
+            color: #000;
+        }
+        
+        /* Cabeçalho Estilo Excel */
+        .header-title {
+            font-size: 14pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+        .header-week {
+            font-size: 11pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .info-table { width: 100%; margin-bottom: 15px; border-collapse: collapse; }
+        .info-table td { padding: 3px; }
+        .label { font-weight: bold; width: 130px; }
+        
+        /* Box Bancário */
+        .bank-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+            border: 1px solid #000;
+        }
+        .bank-table th {
+            background-color: #DCE6F1; /* Azul Claro */
+            border: 1px solid #000;
+            padding: 4px;
+            font-size: 8pt;
+            text-align: center;
+        }
+        .bank-table td {
+            border: 1px solid #000;
+            padding: 4px;
+            text-align: center;
+            font-size: 9pt;
+        }
+
+        /* Tabela Principal */
+        .main-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .main-table th {
+            background-color: #4F81BD; /* Azul Corporativo Escuro */
+            color: white;
+            border: 1px solid #000;
+            padding: 6px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 9pt;
+        }
+        .main-table td {
+            border: 1px solid #000;
+            padding: 5px;
+            vertical-align: middle;
+            font-size: 8.5pt;
+        }
+        
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .text-left { text-align: left; }
+
+        /* Links */
+        a { color: #0000EE; text-decoration: none; }
+        
+        /* Totais */
+        .row-total td {
+            background-color: #DCE6F1;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+
+        /* Assinaturas */
+        .signatures { margin-top: 40px; width: 100%; }
+        .sig-box { text-align: center; width: 40%; display: inline-block; vertical-align: top; }
+        .sig-line { border-top: 1px solid #000; margin: 0 20px; padding-top: 5px; }
+
+        /* Galeria */
+        .gallery-section { page-break-before: always; }
+        .gallery-title { 
+            border-bottom: 2px solid #4F81BD; 
+            color: #4F81BD; 
+            font-size: 14pt; 
+            margin-bottom: 20px; 
+        }
+        .img-card {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            background: #f9f9f9;
+            page-break-inside: avoid;
+        }
+        .img-evidence {
+            max-width: 95%;
+            max-height: 500px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-title">PLANILHA DE DESPESA</div>
+    <div class="header-week">{{ semana_iso }}/{{ ano }}</div>
+
+    <table style="width: 100%; margin-bottom: 10px;">
+        <tr>
+            <td width="60%" style="vertical-align: top;">
+                <table class="info-table">
+                    <tr><td class="label">FUNCIONÁRIO:</td><td>{{ funcionario.nome_completo|upper }}</td></tr>
+                    <tr><td class="label">RESIDÊNCIA:</td><td>{{ funcionario.endereco }} - {{ funcionario.bairro }}</td></tr>
+                    <tr><td class="label">TRANSPORTE:</td><td>{{ funcionario.tipo_veiculo|default:"Veículo Particular"|upper }}</td></tr>
+                    <tr><td class="label">PERÍODO:</td><td>DE {{ dt_inicio|date:"d/m/Y" }} A {{ dt_fim|date:"d/m/Y" }}</td></tr>
+                </table>
+            </td>
+            <td width="40%" style="vertical-align: top;">
+                <table class="bank-table">
+                    <thead>
+                        <tr>
+                            <th>BASE</th><th>BANCO</th><th>AGÊNCIA</th><th>OPERAÇÃO</th><th>CONTA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ funcionario.base|default:"-" }}</td>
+                            <td>{{ funcionario.banco|default:"-" }}</td>
+                            <td>{{ funcionario.agencia|default:"-" }}</td>
+                            <td>{{ funcionario.operacao|default:"-" }}</td>
+                            <td>{{ funcionario.conta|default:"-" }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+    </table>
+
+    <table class="main-table">
+        <thead>
+            <tr>
+                <th width="8%">Data</th>
+                <th width="12%">Chamado</th>
+                <th width="15%">Tipo de Despesa</th>
+                <th width="20%">Origem / Descrição</th>
+                <th width="20%">Destino</th>
+                <th width="8%">KM</th>
+                <th width="10%">Valor</th>
+                <th width="7%">Obs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in lista_itens %}
+            <tr>
+                <td class="text-center">{{ item.data|date:"d/m/Y" }}</td>
+                <td class="text-center">{{ item.chamado }}</td>
+                <td class="text-center">{{ item.tipo }}</td>
+                
+                <td>
+                    {% if item.is_km %}
+                        {{ item.origem }}
+                    {% else %}
+                        {{ item.obs|default:item.tipo }}
+                    {% endif %}
+                </td>
+                
+                <td>
+                    {% if item.is_km %}
+                        {{ item.destino }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                
+                <td class="text-center">
+                    {% if item.is_km %}{{ item.km|floatformat:1 }}{% else %}-{% endif %}
+                </td>
+                
+                <td class="text-right">
+                    R$ {{ item.valor|floatformat:2 }}
+                </td>
+
+                <td class="text-center" style="font-size: 8pt;">
+                    {% if item.link_maps %}
+                        <a href="{{ item.link_maps }}" target="_blank">Rota Link</a>
+                    {% elif item.tem_img %}
+                        <span style="color:blue;">(Ver Anexo)</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            
+            <tr class="row-total">
+                <td colspan="6" class="text-right">TOTAL</td>
+                <td class="text-right">R$ {{ total_valor|floatformat:2 }}</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="signatures">
+        <tr>
+            <td width="50%" align="center">
+                <div class="sig-line">
+                    <b>{{ funcionario.nome_completo|upper }}</b><br>
+                    Colaborador
+                </div>
+            </td>
+            <td width="50%" align="center">
+                <div class="sig-line">
+                    <b>{{ gestor_nome|upper }}</b><br>
+                    Gerente
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    {% if lista_itens %}
+        <div class="gallery-section">
+            <h2 class="gallery-title">Comprovantes e Anexos</h2>
+            {% for item in lista_itens %}
+                {% if item.tem_img and item.comprovante_path %}
+                <div class="img-card">
+                    <p><strong>{{ item.tipo }}</strong> - {{ item.data|date:"d/m/Y" }} (R$ {{ item.valor|floatformat:2 }})</p>
+                    <img src="file://{{ item.comprovante_path }}" class="img-evidence">
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+</body>
+</html>

@@ -45,6 +45,49 @@
             gap: 15px;
         }
 
+        /* --- ESTILOS DE TABELA RESPONSIVA --- */
+        
+        /* Desktop: Cabeçalho Gruda na Janela */
+        @media (min-width: 768px) {
+            .table-responsive {
+                overflow: visible !important; /* Permite sticky na janela */
+            }
+            thead th {
+                position: sticky;
+                top: 0;
+                background: #fff;
+                z-index: 10;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                padding-top: 15px;
+                padding-bottom: 15px;
+            }
+        }
+
+        /* Mobile: Scroll Horizontal + Ajustes */
+        @media (max-width: 767px) {
+            .page-container { padding: 15px 10px; }
+            .header-box { flex-direction: column; align-items: stretch; text-align: center; }
+            .header-box > div { width: 100%; justify-content: center; }
+            
+            /* Inputs menores no mobile */
+            .form-control-time {
+                min-width: 65px !important;
+                font-size: 0.8rem !important;
+                padding: 2px !important;
+            }
+            
+            .table-responsive {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* No mobile, cabeçalho não gruda na janela, gruda na tabela se possível ou rola */
+            thead th {
+                white-space: nowrap;
+                font-size: 0.85rem;
+            }
+        }
+
         /* Inputs da Tabela */
         .form-control-time {
             border: 1px solid #dee2e6;
@@ -64,45 +107,18 @@
         .input-obs {
             font-size: 0.85rem;
             border-radius: 6px;
+            min-width: 150px; /* Garante tamanho mínimo da obs */
         }
 
-        /* --- ESTILOS DE LINHA E CORES --- */
+        /* --- CORES E LINHAS --- */
+        .row-weekend td { background-color: #949191ff !important; color: #000000ff; }
+        .row-feriado td { background-color: #d1e7dd !important; color: #0f5132; }
+        .row-atestado-dias td { background-color: #fee2e2 !important; color: #000000ff; }
+        .row-atestado-horas td { background-color: #fef9c3 !important; color: #000000ff; }
+        .row-ferias td { background-color: #cff4fc !important; color: #055160; } /* AZUL FÉRIAS */
 
-        /* 1. FIM DE SEMANA (Cinza) */
-        .row-weekend td { 
-            background-color: #949191ff !important; 
-            color: #000000ff;
-        }
-
-        /* 2. FERIADO (Verde Claro) */
-        .row-feriado td { 
-            background-color: #d1e7dd !important; 
-            color: #0f5132;
-        }
-
-        /* 3. ATESTADO DE DIAS (Vermelho Claro) */
-        .row-atestado-dias td { 
-            background-color: #fee2e2 !important; 
-            color: #000000ff;
-        }
-
-        /* 4. ATESTADO DE HORAS (Amarelo Claro) */
-        .row-atestado-horas td { 
-            background-color: #fef9c3 !important; 
-            color: #000000ff;
-        }
-
-        /* 5. FÉRIAS (Azul Claro) */
-        .row-ferias td {
-            background-color: #cff4fc !important; /* Ciano/Azul suave Bootstrap */
-            color: #055160;
-        }
-
-        /* Deixa os inputs transparentes nessas linhas */
-        .row-weekend input, 
-        .row-feriado input, 
-        .row-atestado-dias input,
-        .row-atestado-horas input,
+        .row-weekend input, .row-feriado input, 
+        .row-atestado-dias input, .row-atestado-horas input, 
         .row-ferias input {
             background-color: transparent !important;
             border-color: rgba(0,0,0,0.1);
@@ -112,27 +128,13 @@
         .badge-feriado { background: #198754; color: white; }
         .badge-atestado-dias { background: #ff0000ff; color: white; }
         .badge-atestado-horas { background: #757e02ff; color: white; }
-        .badge-ferias { background: #0dcaf0; color: black; } /* Azul Ciano */
+        .badge-ferias { background: #0dcaf0; color: black; } /* AZUL */
 
-        /* Cores Específicas para o Texto da Observação */
+        /* Obs Colors */
         .obs-feriado { color: #198754 !important; font-weight: bold; }
         .obs-atestado-dias { color: #ff0000ff !important; font-weight: bold; font-style: italic; }
         .obs-atestado-horas { color: #757e02ff !important; font-weight: bold; }
-        .obs-ferias { color: #0aa2c0 !important; font-weight: bold; } /* Um azul um pouco mais escuro para ler melhor */
-
-        /* Tabela expandida */
-        .table-responsive { overflow: visible; }
-        
-        /* Cabeçalho Sticky */
-        thead th {
-            position: sticky;
-            top: 0;
-            background: #fff;
-            z-index: 10;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            padding-top: 15px;
-            padding-bottom: 15px;
-        }
+        .obs-ferias { color: #0aa2c0 !important; font-weight: bold; }
 
         /* Botão Flutuante */
         .floating-save-bar {
@@ -149,6 +151,9 @@
             gap: 15px;
             z-index: 1000;
             border: 1px solid rgba(0,0,0,0.05);
+            width: 90%;
+            max-width: 400px;
+            justify-content: center;
         }
     </style>
 </head>
@@ -171,9 +176,9 @@
     <div class="page-container">
         
         <div class="header-box">
-            <div>
+            <div class="mb-3 mb-md-0">
                 <h3 class="fw-bold text-dark mb-1">Folha de Ponto</h3>
-                <div class="d-flex align-items-center gap-3 mt-2">
+                <div class="d-flex align-items-center justify-content-center justify-content-md-start gap-3 mt-2">
                     {% if prev_mes %}
                         <a href="?mes={{ prev_mes }}&ano={{ prev_ano }}" class="btn btn-sm btn-light border rounded-pill">
                             <i class="fas fa-chevron-left"></i>
@@ -192,9 +197,9 @@
                 </div>
             </div>
 
-            <div class="d-flex gap-2 flex-wrap justify-content-end align-self-center">
+            <div class="d-flex gap-2 flex-wrap justify-content-center justify-content-md-end align-self-center">
                 {% if not is_locked %}
-                    <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                    <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-none d-md-inline-block">
                         <i class="fas fa-save me-2"></i> Salvar
                     </button>
                 {% else %}
@@ -214,26 +219,26 @@
                 {% endif %}
             </div>
 
-            <div class="w-100 d-flex flex-wrap gap-4 mt-3 pt-3 border-top">
+            <div class="w-100 d-flex flex-wrap gap-3 mt-3 pt-3 border-top justify-content-center justify-content-md-start">
                 <div class="d-flex align-items-center" title="Dias não úteis">
-                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #6d6a6aff;"></span>
-                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Fim de Semana</small>
+                    <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #949191ff;"></span>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem;">Fim de Semana</small>
                 </div>
-                <div class="d-flex align-items-center" title="Feriados Nacionais/Estaduais">
+                <div class="d-flex align-items-center" title="Feriados">
                     <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #198754;"></span>
-                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Feriado</small>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem;">Feriado</small>
                 </div>
-                <div class="d-flex align-items-center" title="Afastamento por atestado médico (Dias)">
+                <div class="d-flex align-items-center" title="Afastamento">
                     <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #ff0000ff;"></span>
-                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Atestado (Afastamento)</small>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem;">Atestado</small>
                 </div>
-                <div class="d-flex align-items-center" title="Declaração de comparecimento (Horas)">
+                <div class="d-flex align-items-center" title="Comparecimento">
                     <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #757e02ff;"></span>
-                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Comparecimento (Horas)</small>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem;">Comparecimento</small>
                 </div>
-                <div class="d-flex align-items-center" title="Período de Férias">
+                <div class="d-flex align-items-center" title="Férias">
                     <span class="rounded-circle border me-2 shadow-sm" style="width: 14px; height: 14px; background-color: #0dcaf0;"></span>
-                    <small class="text-muted fw-bold" style="font-size: 0.8rem;">Férias</small>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem;">Férias</small>
                 </div>
             </div>
         </div>
@@ -253,7 +258,7 @@
                     <input type="hidden" name="mes" value="{{ mes_atual }}">
                     <input type="hidden" name="ano" value="{{ ano_atual }}">
 
-                    <table class="table table-hover mb-0 align-middle">
+                    <table class="table table-hover mb-0 align-middle text-nowrap">
                         <thead class="bg-light">
                             <tr>
                                 <th class="ps-4 text-secondary">Dia</th>
@@ -311,7 +316,7 @@
                                         <td class="p-1"><input type="time" name="saida_extra_{{ dia.data.day }}" value="{{ reg.extra_saida|date:'H:i'|default:'' }}" class="form-control form-control-time fw-bold" {% if is_locked %}disabled{% endif %}></td>
                                     {% endif %}
 
-                                    <td class="pe-4 p-1" style="min-width: 200px;">
+                                    <td class="pe-4 p-1">
                                         <input type="text" name="observacoes_{{ dia.data.day }}" 
                                                value="{{ dia.obs_visual }}" 
                                                class="form-control input-obs 
@@ -328,9 +333,9 @@
                         </tbody>
                     </table>
                     
-                    <div class="p-4 bg-light border-top text-end">
-                        <button type="submit" class="btn btn-success rounded-pill px-5 fw-bold">
-                            <i class="fas fa-save me-2"></i> Salvar Alterações
+                    <div class="p-4 bg-light border-top text-center d-md-none">
+                        <button type="submit" class="btn btn-success rounded-pill px-5 fw-bold w-100">
+                            <i class="fas fa-save me-2"></i> Salvar Tudo
                         </button>
                     </div>
                 </form>
@@ -341,7 +346,7 @@
     {% if not is_locked %}
     <div class="floating-save-bar">
         <span class="text-muted align-self-center small d-none d-md-block">Não esqueça de salvar seu progresso</span>
-        <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+        <button type="submit" form="ponto-form" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm flex-grow-1 flex-md-grow-0">
             <i class="fas fa-save me-2"></i> Salvar
         </button>
     </div>
@@ -363,10 +368,10 @@
                     </div>
 
                     <ol class="list-group list-group-numbered mb-4 small text-muted">
-                        <li class="list-group-item border-0 p-1">Após baixar o arquivo acima...</li>
-                        <li class="list-group-item border-0 p-1">Acesse o <a href="https://assinador.iti.br" target="_blank" class="fw-bold">Gov.br (Assinador)</a>.</li>
-                        <li class="list-group-item border-0 p-1">Assine digitalmente e salve o arquivo.</li>
-                        <li class="list-group-item border-0 p-1">Envie o arquivo assinado (.p7s ou .pdf) abaixo:</li>
+                        <li class="list-group-item border-0 p-1">Após baixar o arquivo...</li>
+                        <li class="list-group-item border-0 p-1">Acesse o <a href="https://assinador.iti.br" target="_blank" class="fw-bold">Gov.br</a>.</li>
+                        <li class="list-group-item border-0 p-1">Assine digitalmente e salve.</li>
+                        <li class="list-group-item border-0 p-1">Envie o arquivo assinado:</li>
                     </ol>
                     
                     <form action="{% url 'salvar_ponto' %}" method="post" enctype="multipart/form-data">
@@ -435,6 +440,9 @@
                 }
             }
 
+            // Detecta se é dispositivo móvel (toque)
+            const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
             const primeiroInput = document.querySelector('tbody tr:first-child input[name^="entrada_1_"]');
             if(primeiroInput) {
                 let clicks = 0;
@@ -449,6 +457,7 @@
                         e.preventDefault();
                         document.querySelectorAll('tbody tr').forEach(tr => preencherLinha(tr));
                         clicks = 0;
+                        alert('Preenchimento automático concluído!');
                     }
                 });
             }

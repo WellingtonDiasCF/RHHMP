@@ -21,23 +21,22 @@ class Cargo(models.Model):
 
 # 2. Tabela de Equipes
 class Equipe(models.Model):
-    nome = models.CharField(max_length=50, verbose_name="Nome da Equipe")
-    local_trabalho = models.CharField("Local de Trabalho", max_length=100, default="Matriz", help_text="Ex: Brasília-DF")
+    nome = models.CharField(max_length=100)
+    gestor = models.ForeignKey('Funcionario', on_delete=models.SET_NULL, null=True, blank=True, related_name='equipes_lideradas')
+    local_trabalho = models.CharField(max_length=100, null=True, blank=True)
+    gestores = models.ManyToManyField('Funcionario', related_name='equipes_gerenciadas', blank=True)
     
-    # Suporte a múltiplos gestores
-    gestores = models.ManyToManyField(
-        'Funcionario', 
-        blank=True, 
-        related_name='equipes_lideradas',
-        verbose_name="Gestores Responsáveis"
-    )
-
-    class Meta:
-        verbose_name = "Equipe"
-        verbose_name_plural = "Equipes"
+    # CORREÇÃO: Este campo deve ficar AQUI (alinhado a esquerda com 'nome'), 
+    # e NÃO dentro de uma class Meta.
+    oculta = models.BooleanField(default=False, verbose_name="Equipe Oculta (Apenas Secundária)", help_text="Se marcado, esta equipe não aparecerá na lista principal de seleção.")
 
     def __str__(self):
         return self.nome
+    
+    # Se você tiver uma class Meta, ela deve vir depois ou antes, mas o campo não pode estar dentro dela.
+    class Meta:
+        verbose_name = "Equipe"
+        verbose_name_plural = "Equipes"
 
 
 # 3. Tabela de Funcionários
@@ -75,7 +74,15 @@ class Funcionario(models.Model):
     jornada_entrada = models.TimeField("Entrada Padrão", default='08:00')
     jornada_saida = models.TimeField("Saída Padrão", default='18:00')
     intervalo_padrao = models.CharField("Intervalo", max_length=50, default="13:00 às 14:12")
-
+    base = models.CharField("Base de Atendimento", max_length=100, blank=True, null=True)
+    tipo_veiculo = models.CharField("Tipo de Veículo", max_length=50, blank=True, null=True, help_text="Ex: Carro Próprio, Moto, etc.")
+    banco = models.CharField("Banco", max_length=100, blank=True, null=True)
+    agencia = models.CharField("Agência", max_length=20, blank=True, null=True)
+    operacao = models.CharField("Operação", max_length=10, blank=True, null=True, help_text="Ex: 013 (Caixa)")
+    conta = models.CharField("Conta", max_length=30, blank=True, null=True)
+    tipo_chave_pix = models.CharField("Tipo Chave PIX", max_length=20, blank=True, null=True)
+    chave_pix = models.CharField("Chave PIX", max_length=100, blank=True, null=True)
+    valor_km = models.DecimalField("Valor do KM (R$)", max_digits=5, decimal_places=2, default=0.00, blank=True, null=True)
     class Meta:
         verbose_name = "Funcionário"
         verbose_name_plural = "Funcionários"
@@ -295,3 +302,54 @@ class Atestado(models.Model):
 
     def __str__(self):
         return f"{self.funcionario.nome_completo} - {self.get_tipo_display()}"
+
+class ControleKM(models.Model):
+    STATUS_CHOICES = [
+        ('Pendente', 'Pendente'),
+        ('Aprovado', 'Aprovado'),
+        ('Pago', 'Pago'),
+        ('Rejeitado', 'Rejeitado'),
+    ]
+
+    funcionario = models.ForeignKey(Funcionario, on_delete=models.CASCADE)
+    data = models.DateField()
+    total_km = models.DecimalField(max_digits=8, decimal_places=2)
+    
+    # --- CAMPO QUE ESTAVA FALTANDO ---
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pendente')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    numero_chamado = models.CharField(max_length=50, null=True, blank=True, verbose_name="Nº Chamado")
+    def __str__(self):
+        return f"{self.funcionario.nome_completo} - {self.data}"
+class DespesaDiversa(models.Model):
+    TIPOS = [
+        ('Estacionamento', 'Estacionamento'),
+        ('Pedagio', 'Pedágio'),
+        ('Jantar', 'Jantar'),
+        ('Hospedagem', 'Hospedagem'),
+        ('Outra', 'Outra'),
+    ]
+    
+    funcionario = models.ForeignKey(Funcionario, on_delete=models.CASCADE)
+    data = models.DateField()
+    numero_chamado = models.CharField(max_length=50, verbose_name="Nº Chamado")
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    especificacao = models.CharField(max_length=255, blank=True, null=True, help_text="Preencher se for 'Outra'")
+    comprovante = models.FileField(upload_to='despesas_diversas/%Y/%m/')
+    valor = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, mas recomendado
+    status = models.CharField(max_length=20, default='Pendente')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.tipo} - {self.numero_chamado}"
+
+class TrechoKM(models.Model):
+    controle = models.ForeignKey(ControleKM, related_name='trechos', on_delete=models.CASCADE)
+    origem = models.CharField(max_length=255)
+    destino = models.CharField(max_length=255)
+    km = models.DecimalField(max_digits=6, decimal_places=2)
+    nome_origem = models.CharField("Nome da Origem", max_length=150, blank=True, null=True)
+    nome_destino = models.CharField("Nome do Destino", max_length=150, blank=True, null=True)
+    def __str__(self):
+        return f"{self.origem} -> {self.destino}"

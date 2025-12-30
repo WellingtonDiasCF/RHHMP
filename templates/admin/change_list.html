@@ -132,8 +132,18 @@
                                             </div>
                                         </td>
                                         <td>{{ result.cargo|default:"-" }}</td>
-                                        <td>{% if result.equipe %}<span class="badge bg-light text-dark border">{{ result.equipe }}</span>{% else %}-{% endif %}</td>
-                                        <td>{{ result.local_trabalho_estado|default:result.equipe.local_trabalho|default:"-" }}</td>
+                                        <td>{% if result.equipe %}<span class="badge bg-light text-dark border">{{ result.equipe }}</span>{% else %}Sem Equipe{% endif %}</td>
+                                        
+                                        <td>
+                                            {% if result.local_trabalho_estado %}
+                                                {{ result.local_trabalho_estado }}
+                                            {% elif result.equipe %}
+                                                {{ result.equipe.local_trabalho|default:"-" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        
                                     {% elif cl.opts.model_name == 'equipe' %}
                                         <td class="ps-4 fw-bold text-dark">{{ result.nome }}</td>
                                         <td>{{ result.local_trabalho|default:"-" }}</td>
@@ -162,9 +172,7 @@
 
         <div class="tab-pane fade" id="content-ponto"><div id="rh-panel-container"></div></div>
         <div class="tab-pane fade" id="content-contracheque"><div id="rh-contracheque-container"></div></div>
-        
         <div class="tab-pane fade" id="content-atestados"><div id="rh-atestados-container"></div></div>
-
         <div class="tab-pane fade" id="content-ferias"><div id="rh-ferias-container"></div></div>
     </div>
 </div>
@@ -199,7 +207,6 @@
 <script>
     // --- FUNÇÕES DE NAVEGAÇÃO E MODAIS ---
     
-    // Função para abrir o modal de Upload Individual
     window.abrirModalIndividual = function(nome, urlAction) {
         var modalEl = document.getElementById('modalUploadIndividual');
         if(!modalEl) { console.error("Modal não encontrado no DOM."); return; }
@@ -209,19 +216,15 @@
         myModal.show();
     }
 
-    // [NOVO] Função para abrir o Modal de Análise de Atestados
-    // Esta função foi movida para cá para ficar acessível globalmente
     window.abrirModalAnalise = function(id, nome, url) {
         var modalEl = document.getElementById('modalAnaliseRH');
         if(!modalEl) { 
             console.error("Modal de análise não encontrado no DOM."); 
             return; 
         }
-        
         document.getElementById('input-atestado-id').value = id;
         document.getElementById('nome-func-analise').innerText = nome;
         document.getElementById('iframe-analise').src = url;
-        
         var myModal = new bootstrap.Modal(modalEl);
         myModal.show();
     }
@@ -303,7 +306,7 @@
     }
     window.triggerPainelContracheque = carregarPainelContracheque;
 
-    // --- [NOVO] LÓGICA DO PAINEL DE ATESTADOS (ABA 4) ---
+    // --- LÓGICA DO PAINEL DE ATESTADOS (ABA 4) ---
     window.filtrarAdminAtestados = function() {
         const elStatus = document.getElementById('atestado-filtro-status');
         const elSearch = document.getElementById('atestado-search-input');
@@ -311,7 +314,6 @@
         const status = elStatus ? elStatus.value : '';
         const query = elSearch ? elSearch.value : '';
 
-        // Adiciona timestamp para forçar refresh
         let url = `{% url 'admin_atestados_partial' %}?t=${new Date().getTime()}`; 
         if(status) url += `&status=${encodeURIComponent(status)}`;
         if(query) url += `&q=${encodeURIComponent(query)}`;

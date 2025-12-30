@@ -19,13 +19,14 @@ class TrocaSenhaObrigatoriaMiddleware:
                 if funcionario.primeiro_acesso:
                     current_url = request.path
                     # Define as URLs permitidas (para não criar loop infinito de redirecionamento)
-                    url_troca = reverse('trocar_senha')
+                    # CORREÇÃO: O nome da URL no urls.py é 'trocar_senha_obrigatoria'
+                    url_troca = reverse('trocar_senha_obrigatoria')
                     url_logout = reverse('logout')
                     url_admin_logout = reverse('admin:logout') 
                     
                     # Se não estiver na página de troca ou logout, redireciona
                     if current_url not in [url_troca, url_logout, url_admin_logout]:
-                        return redirect('trocar_senha')
+                        return redirect('trocar_senha_obrigatoria')
             
             except AttributeError:
                 # O usuário logado não tem perfil de funcionário (ex: superuser puro)

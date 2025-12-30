@@ -8,12 +8,15 @@ from django.urls import reverse, path
 from django.shortcuts import redirect, render
 from django.contrib import messages
 from django.core.files.base import ContentFile
-import pdfplumber  # <--- NOVA BIBLIOTECA
+import pdfplumber
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from django.core.files.base import ContentFile
-from django.contrib import messages
-from .models import Funcionario, RegistroPonto, Cargo, Equipe, Ferias, Contracheque, Atestado
+
+# --- IMPORTS DOS MODELS (Adicionados ControleKM e TrechoKM) ---
+from .models import (
+    Funcionario, RegistroPonto, Cargo, Equipe, 
+    Ferias, Contracheque, Atestado, ControleKM, TrechoKM
+)
 from .forms import UploadLoteContrachequeForm
 
 # Tenta importar pypdf de forma segura
@@ -81,6 +84,16 @@ class FuncionarioAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # --- FILTRO DE EQUIPE OCULTA ---
+        # No campo 'equipe' (Principal), mostramos apenas as NÃO ocultas
+        if 'equipe' in self.fields:
+            self.fields['equipe'].queryset = Equipe.objects.filter(oculta=False)
+            
+        # No campo 'outras_equipes' (Secundárias), mostramos TODAS (ou apenas as ocultas, se preferir)
+        if 'outras_equipes' in self.fields:
+            self.fields['outras_equipes'].queryset = Equipe.objects.all()
+
         if self.instance and self.instance.pk and self.instance.usuario:
             self.fields['username'].initial = self.instance.usuario.username
             self.fields['email'].initial = self.instance.usuario.email
@@ -110,13 +123,11 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     )
 
     def get_local_trabalho(self, obj):
-        if obj.local_trabalho_estado:
-            return obj.local_trabalho_estado
-        if obj.equipe and obj.equipe.local_trabalho:
+        if obj.equipe:
             return obj.equipe.local_trabalho
-        return "-"
+        return "-" 
+    
     get_local_trabalho.short_description = 'Local de Trabalho'
-    get_local_trabalho.admin_order_field = 'equipe__local_trabalho'
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
@@ -174,14 +185,32 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
 
 @admin.register(Equipe)
 class EquipeAdmin(RHAccessMixin, admin.ModelAdmin):
-    list_display = ('nome', 'local_trabalho', 'listar_gestores')
+    # Adicione 'oculta' para você poder filtrar se precisar ver as ocultas depois
+    list_display = ('nome', 'local_trabalho', 'listar_gestores', 'oculta')
     search_fields = ('nome', 'local_trabalho')
-    list_filter = ('local_trabalho',) 
+    list_filter = ('local_trabalho', 'oculta') 
     filter_horizontal = ('gestores',)
+    
+    # Campo para editar
+    fields = ('nome', 'local_trabalho', 'gestor', 'gestores', 'oculta')
+
     def listar_gestores(self, obj):
         return ", ".join([g.nome_completo.split()[0] for g in obj.gestores.all()])
     listar_gestores.short_description = "Gestores"
 
+    # --- O PULO DO GATO: Esconde as ocultas da lista principal ---
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Se for superuser, mostra tudo (para você poder editar/desocultar se precisar)
+        # Se NÃO for superuser (ou se quiser esconder de todos), descomente a linha abaixo:
+        # return qs.filter(oculta=False) 
+        
+        # Lógica recomendada: Mostra apenas as ativas por padrão, 
+        # mas permite ver as ocultas se usar o filtro lateral (list_filter).
+        # Se você quer que elas SUMAM mesmo da lista inicial:
+        if not request.GET.get('oculta__exact'): # Se não estiver filtrando explicitamente...
+             return qs.filter(oculta=False) # ...mostra só as ativas
+        return qs
 @admin.register(Cargo)
 class CargoAdmin(RHAccessMixin, admin.ModelAdmin):
     pass
@@ -203,7 +232,7 @@ class RegistroPontoAdmin(RHAccessMixin, admin.ModelAdmin):
 class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
     autocomplete_fields = ['funcionario'] 
     
-    list_display = ('funcionario', 'periodo_aquisitivo', 'data_inicio', 'status_etapas')
+    list_display = ('funcionario', 'periodo_aquisitivo', 'data_inicio', 'status_etapas', 'acoes_rh')
     list_filter = ('status', 'abono_pecuniario')
     search_fields = ('funcionario__nome_completo',)
     
@@ -214,7 +243,58 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
         return f"1.Agenda {agendado} ➔ 2.Arq {arquivo} ➔ 3.Assinou {assinado}"
     status_etapas.short_description = "Fluxo"
 
+    def acoes_rh(self, obj):
+        if obj.status == 'Concluido':
+            return format_html('<span style="color:green; font-weight:bold;">✅ Concluído</span>')
+        
+        if obj.aviso_assinado or obj.recibo_assinado:
+            url = reverse('admin:ferias_aprovar', args=[obj.pk])
+            return format_html(
+                '''<a class="button" style="background-color: #28a745; color: white; padding: 4px 12px; border-radius: 4px; font-weight: bold;" 
+                   href="{}">Aprovar</a>''',
+                url
+            )
+        return format_html('<span style="color:#999;">Aguardando Docs</span>')
+    
+    acoes_rh.short_description = "Aprovação"
+    acoes_rh.allow_tags = True
+
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path('<int:id>/aprovar/', self.admin_site.admin_view(self.aprovar_ferias_view), name='ferias_aprovar'),
+        ]
+        return my_urls + urls
+
+    def aprovar_ferias_view(self, request, id):
+        ferias = self.get_object(request, id)
+        if ferias:
+            ferias.status = 'Concluido'
+            ferias.save()
+            self.message_user(request, f"Férias de {ferias.funcionario.nome_completo} aprovadas e concluídas com sucesso!", level=messages.SUCCESS)
+        return redirect(request.META.get('HTTP_REFERER', 'admin:core_rh_ferias_changelist'))
+
+    def painel_aprovacao(self, obj):
+        if not obj.pk: return "Salve o registro primeiro."
+        if obj.status == 'Concluido':
+            return format_html('<div style="color:green; font-weight:bold; font-size:14px; padding:10px; border:1px solid green; background:#eaffea; border-radius:5px;">✅ Processo Concluído</div>')
+        
+        if obj.aviso_assinado or obj.recibo_assinado:
+            url = reverse('admin:ferias_aprovar', args=[obj.pk])
+            return format_html(
+                '''<a class="button" style="background-color: #28a745; color: white; font-weight: bold; padding: 10px 20px; border-radius: 5px; text-transform: uppercase;" href="{}"><i class="fas fa-check-circle"></i> Aprovar e Concluir Férias</a>''',
+                url
+            )
+        return format_html('<span style="color:#999; font-style:italic;">Aguardando envio de documentos assinados pelo colaborador...</span>')
+    
+    painel_aprovacao.short_description = "Ação do RH"
+    painel_aprovacao.allow_tags = True
+
     fieldsets = (
+        ('🔍 ANÁLISE E APROVAÇÃO', {
+            'fields': ('painel_aprovacao',),
+            'classes': ('wide',), 
+        }),
         ('PASSO 1: AGENDAR', {
             'fields': ('funcionario', ('data_inicio', 'data_fim'), ('periodo_aquisitivo', 'abono_pecuniario')),
             'classes': ('wide', 'extrapretty'), 
@@ -231,7 +311,7 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
             'classes': ('collapse',), 
         }),
     )
-    readonly_fields = ('aviso_assinado', 'recibo_assinado')
+    readonly_fields = ('painel_aprovacao', 'aviso_assinado', 'recibo_assinado')
 
     def response_change(self, request, obj):
         if "_save_pdf" in request.POST:
@@ -286,10 +366,6 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
         if not PdfReader: raise ImportError("Instale pypdf")
         if not canvas: raise ImportError("Instale reportlab")
         
-        # LOG NO TERMINAL
-        print(">>> INICIANDO PROCESSAMENTO DE PDF <<<")
-        print(f"Data recebida: {data_recebimento}")
-
         arquivo.seek(0)
         plumber_pdf = pdfplumber.open(arquivo)
         
@@ -299,8 +375,6 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
         funcionarios = Funcionario.objects.all()
         count_sucesso = 0
         nao_encontrados = []
-        
-        # Variáveis de Log para mostrar na tela depois
         logs_detalhados = []
 
         for page_num, page in enumerate(reader.pages):
@@ -315,19 +389,13 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
                     break
             
             if funcionario_encontrado:
-                print(f"--- Página {page_num+1}: Funcionário {funcionario_encontrado.nome_completo} encontrado ---")
                 writer = PdfWriter()
                 
-                overlay_pdf = None
                 if data_recebimento:
-                    # Coordenadas Padrão (Fallback)
                     pos_x = 130
                     pos_y = 55
-                    metodo_usado = "FIXO (Padrão)"
-
                     try:
                         p_page = plumber_pdf.pages[page_num]
-                        # Tenta várias variações do texto para garantir
                         palavras = p_page.search("DATA DO RECEBIMENTO") or \
                                    p_page.search("DATA RECEBIMENTO") or \
                                    p_page.search("RECEBIMENTO")
@@ -335,47 +403,28 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
                         if palavras:
                             target = palavras[0]
                             altura_pagina = float(page.mediabox.height)
-                            
-                            # Cálculo
                             pos_x = target['x0'] + 15
                             pos_y = altura_pagina - target['top'] + 12
-                            metodo_usado = "DINÂMICO (Texto Encontrado)"
-                            print(f"   [SUCESSO] Texto achado! X={pos_x}, Y={pos_y}")
-                        else:
-                            print(f"   [AVISO] Texto 'DATA DO RECEBIMENTO' NÃO encontrado. Usando coordenadas fixas.")
-                            logs_detalhados.append(f"Pág {page_num+1}: Texto da data não achado. Usado posição fixa.")
-
                     except Exception as e:
-                        print(f"   [ERRO] Falha no cálculo dinâmico: {e}")
-                        logs_detalhados.append(f"Pág {page_num+1}: Erro no cálculo ({e})")
+                        logs_detalhados.append(f"Pág {page_num+1}: Erro cálculo pos ({e})")
 
-                    # CRIAÇÃO DO CARIMBO
                     try:
                         packet = io.BytesIO()
                         can = canvas.Canvas(packet, pagesize=A4)
                         can.setFont("Helvetica", 10)
-                        
                         data_str = data_recebimento.strftime("%d/%m/%Y")
-                        # Desenha a data
                         can.drawString(pos_x, pos_y, data_str)
-                        
-                        # DEBUG VISUAL: Desenha um ponto vermelho onde ele acha que deve escrever
-                        # (Remova isso depois se ficar feio, mas ajuda a achar a data)
-                        can.setFillColorRGB(1, 0, 0) # Vermelho
+                        can.setFillColorRGB(1, 0, 0) 
                         can.circle(pos_x, pos_y, 2, fill=1) 
-                        
                         can.save()
 
                         packet.seek(0)
                         overlay_pdf = PdfReader(packet)
                         page.merge_page(overlay_pdf.pages[0])
-                        print(f"   [OK] Data {data_str} escrita em X={pos_x:.1f}, Y={pos_y:.1f} ({metodo_usado})")
-                    except Exception as e:
-                        print(f"   [ERRO CRÍTICO] Falha ao desenhar/mesclar PDF: {e}")
+                    except: pass
 
                 writer.add_page(page)
                 
-                # Salva o PDF final
                 pdf_bytes = io.BytesIO()
                 writer.write(pdf_bytes)
                 pdf_content = ContentFile(pdf_bytes.getvalue())
@@ -394,17 +443,31 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
                 cc.arquivo.save(f"holerite_{funcionario_encontrado.id}.pdf", pdf_content)
                 count_sucesso += 1
             else:
-                print(f"--- Página {page_num+1}: NENHUM funcionário identificado ---")
                 nao_encontrados.append(f"Pág {page_num + 1}")
         
         plumber_pdf.close()
         
-        # Feedback para o usuário na tela
         messages.success(request, f"{count_sucesso} processados.")
         if logs_detalhados:
-            # Mostra na tela avisos sobre a data
-            msg_log = " | ".join(logs_detalhados[:3]) # Mostra só os 3 primeiros erros pra não poluir
+            msg_log = " | ".join(logs_detalhados[:3])
             messages.warning(request, f"Atenção nas datas: {msg_log}")
-            
         if nao_encontrados: 
             messages.warning(request, f"Páginas ignoradas (sem nome): {', '.join(nao_encontrados)}")
+
+# --- NOVOS REGISTROS (Atestados e KM) ---
+
+@admin.register(Atestado)
+class AtestadoAdmin(RHAccessMixin, admin.ModelAdmin):
+    list_display = ('funcionario', 'tipo', 'data_inicio', 'qtd_dias', 'status')
+    list_filter = ('status', 'tipo')
+    search_fields = ('funcionario__nome_completo',)
+
+class TrechoKMInline(admin.TabularInline):
+    model = TrechoKM
+    extra = 0
+
+@admin.register(ControleKM)
+class ControleKMAdmin(RHAccessMixin, admin.ModelAdmin):
+    list_display = ('funcionario', 'data', 'total_km', 'status')
+    list_filter = ('status', 'data', 'funcionario')
+    inlines = [TrechoKMInline]

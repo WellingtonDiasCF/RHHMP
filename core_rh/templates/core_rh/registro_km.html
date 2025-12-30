@@ -1,0 +1,478 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Técnico | Portal RH</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- ESTILOS GERAIS --- */
+        body { background-color: #f4f6f9; font-family: 'Inter', sans-serif; color: #333; min-height: 100vh; }
+        .navbar-custom { background: linear-gradient(to right, #1a1a1a, #333); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .page-container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
+        
+        /* --- TABS --- */
+        .nav-tabs { border-bottom: 2px solid #e9ecef; margin-bottom: 20px; }
+        .nav-tabs .nav-link { color: #64748b; font-weight: 600; border: none; padding: 12px 20px; border-radius: 8px 8px 0 0; }
+        .nav-tabs .nav-link.active { color: #FF6600; background-color: #fff; border-bottom: 3px solid #FF6600; }
+        .nav-tabs .nav-link:hover { color: #333; }
+
+        /* --- CARDS & FORMS --- */
+        .header-box { background: #fff; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        
+        /* Ajuste no Card de Registro para ficar mais bonito */
+        .card-registro { 
+            border: 1px solid #eef2f6; 
+            border-radius: 16px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.04); 
+            overflow: hidden; 
+            background: #fff; 
+        }
+        .card-header-registro {
+            background-color: #fff;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 20px 25px;
+        }
+
+        .form-control-custom, .form-select-custom { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 12px 15px; border-radius: 8px; font-size: 0.95rem; }
+        .form-control-custom:focus { background-color: #fff; border-color: #FF6600; box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.1); }
+        
+        /* --- TABELA --- */
+        .table-custom { border-collapse: separate; border-spacing: 0; }
+        .table-custom thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; padding: 15px 20px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        .table-custom tbody td { padding: 18px 20px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; background: #fff; }
+        
+        /* --- STATUS BADGES --- */
+        .badge-soft-primary { background-color: #e0f2fe; color: #0369a1; }
+        .badge-soft-success { background-color: #dcfce7; color: #15803d; }
+        .badge-soft-warning { background-color: #fef3c7; color: #b45309; }
+        .badge-soft-danger  { background-color: #fee2e2; color: #b91c1c; }
+        .badge-soft-secondary { background-color: #f1f5f9; color: #475569; }
+        .badge-pill { padding: 0.5em 1em; border-radius: 50rem; font-weight: 600; font-size: 0.85rem; }
+        
+        /* --- UTILS --- */
+        .route-line { display: flex; align-items: center; margin-bottom: 4px; }
+        .route-icon { width: 20px; text-align: center; margin-right: 8px; }
+        .btn-loading { pointer-events: none; opacity: 0.7; }
+        .spinner-icon { display: none; }
+        .loading .spinner-icon { display: inline-block; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">
+                <i class="fas fa-route me-2 text-warning"></i> Portal RH
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-white small d-none d-md-block">Olá, {{ request.user.first_name }}</span>
+                <a href="{% url 'home' %}" class="btn btn-sm btn-outline-light rounded-pill px-3">Início</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-container">
+        
+        <div class="header-box">
+            <div>
+                <h3 class="fw-bold text-dark mb-1">Painel do Técnico</h3>
+                <p class="text-muted small mb-0">Gerencie seus lançamentos e mantenha seus dados atualizados.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'home' %}" class="btn btn-outline-secondary rounded-pill px-4 fw-bold shadow-sm">Voltar</a>
+            </div>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'success' %}success{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4">
+                    <i class="fas fa-info-circle me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="lancamentos-tab" data-bs-toggle="tab" data-bs-target="#lancamentos" type="button" role="tab"><i class="fas fa-list-alt me-2"></i> Lançamentos</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dados-tab" data-bs-toggle="tab" data-bs-target="#dados" type="button" role="tab"><i class="fas fa-user-cog me-2"></i> Meus Dados</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            
+            <div class="tab-pane fade show active" id="lancamentos" role="tabpanel">
+                
+                <div class="card card-registro mb-4">
+                    <div class="card-header-registro d-flex justify-content-between align-items-center">
+                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-map-marked-alt text-warning me-2"></i> Novo Registro de Rota</h5>
+                        <button type="button" class="btn btn-outline-primary rounded-pill fw-bold btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalDespesaDiversa">
+                            <i class="fas fa-receipt me-1"></i> Despesa Extra
+                        </button>
+                    </div>
+
+                    <div class="card-body p-4">
+                        <form method="POST" id="formRegistro">
+                            {% csrf_token %}
+                            
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-1 text-secondary">Data da Viagem</label>
+                                    <input type="date" name="data_viagem" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-1 text-secondary">Nº Chamado / OS</label>
+                                    <input type="text" name="numero_chamado" class="form-control form-control-custom" placeholder="Ex: 12345" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-1 text-secondary">Origem (Nome)</label>
+                                    <input type="text" name="nome_origem" class="form-control form-control-custom" placeholder="Residência / Nome da Unidade" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-1 text-secondary">Destino (Nome)</label>
+                                    <input type="text" name="nome_destino" class="form-control form-control-custom" placeholder="Residência / Nome da Unidade" required>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-2 text-success">Quilometragem (KM)</label>
+                                    <input type="number" step="0.1" name="km_manual" class="form-control form-control-custom border-success" placeholder="Ex: 15.5" required>
+                                </div>
+                                <div class="col-md-9">
+                                    <label class="fw-bold small mb-2 text-primary"><i class="fas fa-link me-1"></i> Link da Rota (Google Maps)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fab fa-google"></i></span>
+                                        <input type="text" name="google_url" class="form-control border-start-0" style="background-color: #f8f9fa;" placeholder="Cole aqui o link completo da rota..." required autocomplete="off">
+                                    </div>
+                                    <div class="form-text small">Cole o link da rota apenas para conferência (opcional, mas recomendado).</div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="submit" class="btn btn-warning px-5 py-2 fw-bold shadow-sm text-dark rounded-pill">
+                                    <i class="fas fa-save me-2"></i> SALVAR REGISTRO
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card card-custom border-0 shadow-sm">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="fw-bold text-dark mb-0">Histórico de Lançamentos</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Data</th>
+                                    <th>Chamado</th> 
+                                    <th style="width: 40%;">Descrição / Detalhes</th>
+                                    <th class="text-center">Valor / KM</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-end pe-4">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in historico %}
+                                <tr>
+                                    <td class="ps-4"><span class="fw-bold text-dark">{{ item.data|date:"d/m/Y" }}</span></td>
+                                    <td><span class="badge bg-light text-dark border">{{ item.numero_chamado|default:"-" }}</span></td>
+                                    <td>
+                                        {% if item.tipo_despesa %}
+                                            <div class="d-flex align-items-start">
+                                                <div class="me-3 mt-1">
+                                                    <span class="avatar-sm rounded-circle bg-light d-flex align-items-center justify-content-center p-2 border">
+                                                        <i class="fas fa-receipt text-success fs-5"></i>
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <h6 class="mb-1 text-dark fw-bold">{{ item.tipo_despesa }}</h6>
+                                                    {% if item.especificacao %}
+                                                        <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i> {{ item.especificacao }}</div>
+                                                    {% endif %}
+                                                    {% if item.comprovante %}
+                                                        <a href="{{ item.comprovante.url }}" target="_blank" class="badge bg-white text-primary border text-decoration-none fw-normal mt-1">
+                                                            <i class="fas fa-paperclip me-1"></i> Ver Recibo Anexado
+                                                        </a>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% elif item.is_km %}
+                                            {% if item.trechos %}
+                                                {% for t in item.trechos %}
+                                                <div class="mb-3 last-mb-0">
+                                                    <div class="route-line">
+                                                        <div class="route-icon"><i class="fas fa-circle text-success small"></i></div>
+                                                        <span class="text-dark small fw-bold">{{ t.nome_origem|default:t.origem|truncatechars:40 }}</span>
+                                                    </div>
+                                                    <div class="route-line">
+                                                        <div class="route-icon"><i class="fas fa-ellipsis-v text-muted small"></i></div>
+                                                    </div>
+                                                    <div class="route-line">
+                                                        <div class="route-icon"><i class="fas fa-map-marker-alt text-danger"></i></div>
+                                                        <span class="text-dark small fw-bold">{{ t.nome_destino|default:t.destino|truncatechars:40 }}</span>
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="d-flex align-items-center text-muted py-2">
+                                                    <span class="small fw-bold">Registro Manual</span>
+                                                </div>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i> Erro</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if item.tipo_despesa %}
+                                            {% if item.valor %}
+                                                <span class="badge badge-pill badge-soft-success">R$ {{ item.valor|floatformat:2 }}</span>
+                                            {% else %}
+                                                <span class="badge badge-pill badge-soft-secondary">Reembolso</span>
+                                            {% endif %}
+                                        {% else %}
+                                            {% if item.total_km %}
+                                                <span class="badge badge-pill badge-soft-primary">{{ item.total_km }} km</span>
+                                            {% else %}
+                                                <span class="badge badge-pill badge-soft-secondary">--</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge badge-pill badge-soft-{% if item.status == 'Aprovado' or item.status == 'Pago' %}success{% elif item.status == 'Pendente' %}warning{% else %}danger{% endif %}">{{ item.status }}</span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        {% if item.tipo_despesa %}
+                                            <a href="{% url 'excluir_despesa' item.id %}" class="btn btn-sm btn-light text-danger border rounded-circle" onclick="return confirm('Tem certeza?')" title="Excluir">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </a>
+                                        {% else %}
+                                            <div class="d-flex justify-content-end gap-2">
+                                                <button type="button" class="btn btn-sm btn-outline-primary rounded-circle border" 
+                                                        onclick="abrirModalRepetir('{{ item.id }}', '{{ item.numero_chamado }}')" 
+                                                        title="Repetir Rota">
+                                                    <i class="fas fa-redo"></i>
+                                                </button>
+
+                                                <a href="{% url 'excluir_km' item.id %}" class="btn btn-sm btn-light text-danger border rounded-circle" onclick="return confirm('Tem certeza?')" title="Excluir">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </a>
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum lançamento encontrado</h6></td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="dados" role="tabpanel">
+                <div class="card card-custom">
+                    <div class="card-header bg-white py-3 border-bottom">
+                        <h6 class="fw-bold text-dark mb-0"><i class="fas fa-user-edit text-primary me-2"></i> Dados Cadastrais e Bancários</h6>
+                    </div>
+                    <div class="card-body p-4">
+                        <form action="{% url 'atualizar_dados_tecnico' %}" method="POST">
+                            {% csrf_token %}
+                            
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 mt-2 border-bottom pb-2">Endereço Residencial</h6>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <label class="fw-bold small mb-1">CEP</label>
+                                    <input type="text" name="cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}" maxlength="9" placeholder="00000-000">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="fw-bold small mb-1">Endereço (Rua, Nº)</label>
+                                    <input type="text" name="endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Bairro</label>
+                                    <input type="text" name="bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Cidade</label>
+                                    <input type="text" name="cidade" class="form-control form-control-custom" value="{{ funcionario.cidade|default:'' }}">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="fw-bold small mb-1">Estado</label>
+                                    <input type="text" name="estado" class="form-control form-control-custom" value="{{ funcionario.estado|default:'' }}" maxlength="2">
+                                </div>
+                            </div>
+
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Dados Operacionais</h6>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Base de Atendimento</label>
+                                    <input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}" placeholder="Ex: BH / Divinópolis">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Tipo de Veículo</label>
+                                    <input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}" placeholder="Ex: Carro Próprio / Moto">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1 text-success">Valor do KM (R$)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text border-0 bg-success text-white">R$</span>
+                                        <input type="text" name="valor_km" class="form-control form-control-custom" value="{{ funcionario.valor_km|default:''|floatformat:2 }}" placeholder="0,00">
+                                    </div>
+                                    <div class="form-text small">Valor acordado por quilômetro rodado.</div>
+                                </div>
+                            </div>
+
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Dados Bancários (Para Reembolso)</h6>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Banco</label>
+                                    <input type="text" name="banco" class="form-control form-control-custom" value="{{ funcionario.banco|default:'' }}" placeholder="Ex: Caixa, Bradesco">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="fw-bold small mb-1">Agência</label>
+                                    <input type="text" name="agencia" class="form-control form-control-custom" value="{{ funcionario.agencia|default:'' }}">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="fw-bold small mb-1">Operação</label>
+                                    <input type="text" name="operacao" class="form-control form-control-custom" value="{{ funcionario.operacao|default:'' }}" placeholder="Ex: 013">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="fw-bold small mb-1">Conta</label>
+                                    <input type="text" name="conta" class="form-control form-control-custom" value="{{ funcionario.conta|default:'' }}">
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end mt-4">
+                                <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
+                                    <i class="fas fa-save me-2"></i> Salvar Meus Dados
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div> 
+    </div>
+
+    <div class="modal fade" id="modalDespesaDiversa" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="{% url 'salvar_despesa_diversa' %}" method="POST" enctype="multipart/form-data" class="modal-content">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-receipt text-primary me-2"></i> Nova Despesa Diversa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="fw-bold small mb-1">Data</label>
+                            <input type="date" name="data_despesa" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="fw-bold small mb-1">Nº Chamado</label>
+                            <input type="text" name="numero_chamado" class="form-control form-control-custom" placeholder="Ex: 5543" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="fw-bold small mb-1">Valor (R$)</label>
+                            <div class="input-group">
+                                <span class="input-group-text border-0 bg-light">R$</span>
+                                <input type="text" name="valor" class="form-control form-control-custom ps-2" placeholder="0,00" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="fw-bold small mb-1">Tipo de Despesa</label>
+                            <select name="tipo_despesa" id="selectTipoDespesa" class="form-select form-control-custom" onchange="toggleEspecificacao()" required>
+                                <option value="" selected disabled>Selecione...</option>
+                                <option value="Estacionamento">Estacionamento</option>
+                                <option value="Pedagio">Pedágio</option>
+                                <option value="Jantar">Jantar</option>
+                                <option value="Hospedagem">Hospedagem</option>
+                                <option value="Outra">Outra (Especificar)</option>
+                            </select>
+                        </div>
+                        <div class="col-12" id="divEspecificacao" style="display: none;">
+                            <label class="fw-bold small mb-1 text-primary">Especifique "Outra"</label>
+                            <input type="text" name="especificacao" id="inputEspecificacao" class="form-control form-control-custom" placeholder="Ex: Material de escritório">
+                        </div>
+                        <div class="col-12">
+                            <label class="fw-bold small mb-1">Comprovante / Recibo</label>
+                            <input type="file" name="comprovante" class="form-control form-control-custom" accept="image/*,.pdf" required>
+                            <div class="form-text small">Obrigatório anexar foto ou PDF.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Salvar Despesa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalRepetirRota" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <form action="{% url 'repetir_rota_view' %}" method="POST" class="modal-content">
+                {% csrf_token %}
+                <input type="hidden" name="km_id" id="input_km_id_repetir">
+                
+                <div class="modal-header border-0 pb-0">
+                    <h6 class="modal-title fw-bold text-dark">
+                        <i class="fas fa-redo text-primary me-2"></i> Repetir Rota
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body pt-3">
+                    <p class="text-muted small mb-3">Copiar dados de KM e Local para um novo registro.</p>
+                    
+                    <div class="mb-3">
+                        <label class="fw-bold small mb-1">Nova Data</label>
+                        <input type="date" name="nova_data" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="fw-bold small mb-1">Novo Nº Chamado</label>
+                        <input type="text" name="novo_chamado" id="input_novo_chamado" class="form-control form-control-custom" placeholder="Ex: 12345" required>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary fw-bold shadow-sm rounded-pill">
+                            Confirmar Cópia
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleEspecificacao() {
+            const select = document.getElementById('selectTipoDespesa');
+            const divEsp = document.getElementById('divEspecificacao');
+            const inputEsp = document.getElementById('inputEspecificacao');
+            if (select.value === 'Outra') { divEsp.style.display = 'block'; inputEsp.required = true; } 
+            else { divEsp.style.display = 'none'; inputEsp.required = false; inputEsp.value = ''; }
+        }
+
+        function abrirModalRepetir(id, chamadoAntigo) {
+            document.getElementById('input_km_id_repetir').value = id;
+            var myModal = new bootstrap.Modal(document.getElementById('modalRepetirRota'));
+            myModal.show();
+        }
+    </script>
+</body>
+</html>

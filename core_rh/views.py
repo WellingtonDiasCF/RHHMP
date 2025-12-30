@@ -1,49 +1,67 @@
 from django.db.models import Q
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 import zipfile
 import io
 import os
 import base64
+import requests 
+import re 
+from urllib.parse import unquote 
 from django.contrib.staticfiles import finders
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.views import PasswordResetView, PasswordResetDoneView
-from django.contrib.auth.forms import PasswordResetForm
-from django.urls import reverse_lazy
+from django.contrib.auth.forms import PasswordResetForm, PasswordChangeForm
+from django.urls import reverse_lazy, reverse
 from django.utils import timezone 
 from django.http import HttpResponse 
 from datetime import date, time, datetime, timedelta 
-from calendar import monthrange 
+from calendar import monthrange, monthcalendar 
 from django.template.loader import render_to_string 
 from django.conf import settings
-from .models import RegistroPonto, Funcionario, Equipe, Contracheque, Ferias, Atestado
 from django.contrib import messages
-from django.shortcuts import get_object_or_404
-from django.contrib.auth import update_session_auth_hash
-from django.contrib.auth.forms import PasswordChangeForm
-from django.urls import reverse
+from django.core.files.base import ContentFile
+from django.db.models import Sum
+
+# PDF e Relatórios
 import pdfplumber
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from django.core.files.base import ContentFile
-from reportlab.lib import colors  # <--- ESSE ERA O QUE FALTAVA
-from .forms import AtestadoForm
+from reportlab.lib import colors 
+import openpyxl
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.drawing.image import Image as ExcelImage
+from openpyxl.utils import get_column_letter
 
-try:
-    from weasyprint import HTML
-except ImportError:
-    print("AVISO: WeasyPrint não instalado. Instale com 'pip install weasyprint'")
-
+# Utils Extras
 import holidays 
+try:
+    from weasyprint import HTML, CSS
+except ImportError:
+    pass
 
 try:
-    from .models import RegistroPonto, Funcionario
+    from pdf2image import convert_from_path
+    HAS_PDF_CONVERTER = True
 except ImportError:
-    print("AVISO: Modelos 'RegistroPonto' ou 'Funcionario' não encontrados.")
+    HAS_PDF_CONVERTER = False
 
-from .forms import CpfPasswordResetForm
+try:
+    from pypdf import PdfReader, PdfWriter
+except ImportError:
+    PdfReader = None
+    PdfWriter = None
+
+# Models e Forms
+from .models import (
+    RegistroPonto, Funcionario, Equipe, Contracheque, Ferias, 
+    Atestado, ControleKM, TrechoKM, DespesaDiversa
+)
+from .forms import AtestadoForm, CpfPasswordResetForm
 
 User = get_user_model()
+
 def usuario_eh_rh(user):
     """
     Retorna True se o usuário for Superuser, ou estiver na equipe 'RH' 
@@ -81,8 +99,6 @@ MESES_PT = {
     5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
 }
-
-
 
 def get_competencia_atual():
     hoje = timezone.now()
@@ -129,33 +145,42 @@ def calcular_horas_trabalhadas(entrada_1_str, saida_1_str, entrada_2_str, saida_
         return timedelta()
     return total
 
-
-
-# Em core_rh/views.py
+def usuario_eh_campo(user):
+    if not user.is_authenticated: return False
+    if user.is_superuser: return True
+    try:
+        func = user.funcionario
+        termo = "Campo"
+        if func.equipe and termo in func.equipe.nome: return True
+        if func.outras_equipes.filter(nome__icontains=termo).exists(): return True
+    except:
+        pass
+    return False
 
 @login_required 
 def home(request):
     is_gestor = False
-    tem_ferias = False # Padrão: Não mostra o card
-    
+    tem_ferias = False 
+    is_campo = False
+    equipes_gestor = []
+
     try:
-        # Tenta pegar o funcionário vinculado ao usuário
         funcionario = Funcionario.objects.get(usuario=request.user)
         
-        # Verifica se é gestor
-        if funcionario.equipes_lideradas.exists():
-            is_gestor = True
+        # --- CORREÇÃO: Verifica se é gestor (Principal ou Lista) de equipes NÃO ocultas ---
+        equipes_lideradas = Equipe.objects.filter(
+            Q(oculta=False) & (Q(gestor=funcionario) | Q(gestores=funcionario))
+        ).distinct()
 
-        # --- NOVA LÓGICA DE FÉRIAS ---
-        # Só mostra o card se existir pelo menos uma férias COM ARQUIVO de aviso
-        # (exclude(arquivo_aviso='') garante que o campo não está vazio)
-        try:
-            from .models import Ferias
-            if Ferias.objects.filter(funcionario=funcionario).exclude(arquivo_aviso='').exists():
-                tem_ferias = True
-        except ImportError:
-            pass
+        if equipes_lideradas.exists():
+            is_gestor = True
+            equipes_gestor = equipes_lideradas
+
+        if Ferias.objects.filter(funcionario=funcionario).exclude(arquivo_aviso='').exists():
+            tem_ferias = True
             
+        is_campo = usuario_eh_campo(request.user)
+        
     except Funcionario.DoesNotExist: 
         pass 
     
@@ -163,8 +188,10 @@ def home(request):
     
     return render(request, 'core_rh/index.html', {
         'is_gestor': is_gestor or request.user.is_superuser, 
+        'equipes_lideradas': equipes_gestor, # Envia as equipes para o template
         'can_access_rh_area': can_access_rh_area,
-        'tem_ferias': tem_ferias, # Enviamos essa variável para o HTML
+        'tem_ferias': tem_ferias,
+        'is_campo': is_campo, 
     })
 
 @login_required
@@ -194,18 +221,11 @@ def salvar_ponto_view(request):
 
     if request.FILES.get('pdf_assinado'):
         arquivo = request.FILES['pdf_assinado']
-        
-        
         nome_limpo = funcionario.nome_completo.strip().replace(' ', '_')
         arquivo.name = f"Folha_{nome_limpo}_{mes:02d}_{ano}_Assinado_Colab.pdf"
-        
         registros = RegistroPonto.objects.filter(funcionario=funcionario, data__range=[data_inicio, data_fim])
-        
         if registros.exists():
-            registros.update(
-                assinado_funcionario=True,
-                assinado_gestor=False 
-            )
+            registros.update(assinado_funcionario=True, assinado_gestor=False)
             primeiro_reg = registros.first()
             primeiro_reg.arquivo_anexo = arquivo
             primeiro_reg.save()
@@ -219,7 +239,6 @@ def salvar_ponto_view(request):
     for i in range(delta_dias + 1):
         data_ponto = data_inicio + timedelta(days=i)
         dia_num = data_ponto.day
-        
         entrada_1_str = request.POST.get(f'entrada_1_{dia_num}', '').strip()
         saida_1_str = request.POST.get(f'saida_1_{dia_num}', '').strip()
         entrada_2_str = request.POST.get(f'entrada_2_{dia_num}', '').strip()
@@ -253,18 +272,18 @@ def salvar_ponto_view(request):
             funcionario=funcionario, 
             data=data_ponto,
             defaults={
-                'entrada_manha': entrada_1,    
-                'saida_almoco': saida_1,      
-                'volta_almoco': entrada_2,     
-                'saida_tarde': saida_2,        
+                'entrada_manha': entrada_1,      
+                'saida_almoco': saida_1,        
+                'volta_almoco': entrada_2,        
+                'saida_tarde': saida_2,          
                 'extra_entrada': entrada_extra,
-                'extra_saida': saida_extra,    
-                'observacao': observacoes,     
+                'extra_saida': saida_extra,      
+                'observacao': observacoes,        
             }
         )
 
     if not request.FILES.get('pdf_assinado'):
-        messages.success(request, "Dados de ponto salvos com sucesso!")        
+        messages.success(request, "Dados de ponto salvos com sucesso!")          
     
     return redirect(redirect_url)
 
@@ -277,19 +296,21 @@ def gerar_pdf_ponto_view(request):
         target_func_id = request.GET.get('funcionario_id')
     except ValueError: return HttpResponse("Parâmetros inválidos.", status=400)
 
-    # Verifica permissão para ver ponto de outro (Gestor ou RH)
     if target_func_id:
         try:
             alvo = Funcionario.objects.get(id=target_func_id)
-            if usuario_eh_rh(request.user): 
+            if usuario_eh_rh(request.user) or request.user.is_superuser: 
                 funcionario = alvo
             else:
                 try:
                     gestor = Funcionario.objects.get(usuario=request.user)
-                    equipes_alvo = [alvo.equipe] + list(alvo.outras_equipes.all())
-                    equipes_que_lidero = gestor.equipes_lideradas.all()
                     
-                    if any(e in equipes_que_lidero for e in equipes_alvo if e):
+                    # --- CORREÇÃO: Permissão para gerar PDF como gestor ---
+                    is_gestor_autorizado = Equipe.objects.filter(
+                        Q(gestor=gestor) | Q(gestores=gestor)
+                    ).filter(Q(id=alvo.equipe.id) | Q(id__in=alvo.outras_equipes.values_list('id', flat=True))).exists()
+
+                    if is_gestor_autorizado:
                         funcionario = alvo
                     else: return HttpResponse("Acesso negado.", status=403)
                 except Funcionario.DoesNotExist: return HttpResponse("Perfil não encontrado.", status=403)
@@ -306,7 +327,6 @@ def gerar_pdf_ponto_view(request):
     data_inicio, data_fim = get_datas_competencia(mes, ano)
     registros_dict = {r.data.day: r for r in RegistroPonto.objects.filter(funcionario=funcionario, data__range=[data_inicio, data_fim]).order_by('data')}
     
-    # --- NOVO: BUSCA ATESTADOS PARA O PDF ---
     atestados_periodo = Atestado.objects.filter(
         funcionario=funcionario,
         status='Aprovado',
@@ -322,7 +342,6 @@ def gerar_pdf_ponto_view(request):
         data_atual = data_inicio + timedelta(days=i)
         registro = registros_dict.get(data_atual.day)
         
-        # Verifica Atestados
         tipo_atestado = None
         for atestado in atestados_periodo:
             if atestado.tipo == 'DIAS':
@@ -336,7 +355,6 @@ def gerar_pdf_ponto_view(request):
         eh_feriado = data_atual in feriados_br
         nome_feriado = feriados_br.get(data_atual).upper() if eh_feriado else ""
 
-        # Cria Mock se não houver registro para preencher a linha do PDF
         if not registro:
             class MockReg:
                 entrada_manha = None
@@ -349,14 +367,12 @@ def gerar_pdf_ponto_view(request):
                 observacao = ""
             registro = MockReg()
         
-        # Sobrescreve a observação com o Atestado
         if tipo_atestado == 'DIAS':
             registro.observacao = "Atestado Médico"
         elif tipo_atestado == 'HORAS':
-            if not registro.observacao: # Só sobrescreve se tiver vazio
+            if not registro.observacao: 
                 registro.observacao = "Atestado de Comparecimento"
 
-        # Cálculos de Horas (Se houver batidas no registro)
         td_normal = timedelta()
         if hasattr(registro, 'pk') and registro.entrada_manha and registro.saida_almoco:
             dt_e1 = datetime.combine(date.min, registro.entrada_manha)
@@ -375,9 +391,6 @@ def gerar_pdf_ponto_view(request):
             if dt_ex_sai > dt_ex_ent: td_extra = dt_ex_sai - dt_ex_ent
         total_extras_delta += td_extra
         
-        # --- CORREÇÃO DO ERRO AttributeError ---
-        # Verificamos se há hora extra. Se sim, formatamos.
-        # Se não, e o atributo não existir (caso do Model real), criamos ele vazio.
         if td_extra.total_seconds() > 0:
             registro.horas_extra = format_delta(td_extra)
         else:
@@ -461,25 +474,22 @@ def folha_ponto_view(request):
     funcionario = None
     feriados_br = holidays.BR(state='DF', years=ano_solicitado)
     
-    # Datas da competência
     data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
     
     atestados_periodo = []
-    ferias_periodo = [] # --- NOVA LISTA ---
+    ferias_periodo = []
 
     try:
         funcionario = Funcionario.objects.get(usuario=request.user)
         if hasattr(funcionario, 'estado_sigla') and funcionario.estado_sigla:
              feriados_br = holidays.BR(state=funcionario.estado_sigla, years=ano_solicitado)
         
-        # Busca atestados aprovados
         atestados_periodo = Atestado.objects.filter(
             funcionario=funcionario,
             status='Aprovado',
             data_inicio__lte=data_fim
         )
 
-        # --- NOVA CONSULTA: Busca Férias que interceptam a competência ---
         ferias_periodo = Ferias.objects.filter(
             funcionario=funcionario,
             data_inicio__lte=data_fim,
@@ -511,15 +521,13 @@ def folha_ponto_view(request):
         eh_feriado = data_atual in feriados_br
         nome_feriado = feriados_br.get(data_atual) if eh_feriado else ""
         
-        # --- LÓGICA DE FÉRIAS ---
         eh_ferias = False
         for f in ferias_periodo:
             if f.data_inicio <= data_atual <= f.data_fim:
                 eh_ferias = True
                 break
 
-        # --- LÓGICA DE ATESTADO ---
-        tipo_atestado = None # None, 'DIAS', 'HORAS'
+        tipo_atestado = None 
         for atestado in atestados_periodo:
             if atestado.tipo == 'DIAS':
                 fim_atestado = atestado.data_inicio + timedelta(days=(atestado.qtd_dias or 1) - 1)
@@ -532,12 +540,11 @@ def folha_ponto_view(request):
         
         registro = registros_dict.get(data_atual.day)
         
-        # Prepara texto da observação visual
         obs_visual = ""
         if registro and registro.observacao:
             obs_visual = registro.observacao
         elif eh_ferias:
-            obs_visual = "Férias" # Texto automático
+            obs_visual = "Férias" 
         elif eh_feriado:
             obs_visual = "FERIADO"
         elif tipo_atestado == 'DIAS':
@@ -553,7 +560,7 @@ def folha_ponto_view(request):
             'nome_feriado': nome_feriado.upper() if nome_feriado else "",
             'registro': registro,
             'tipo_atestado': tipo_atestado,
-            'eh_ferias': eh_ferias, # Nova flag para o template
+            'eh_ferias': eh_ferias,
             'obs_visual': obs_visual
         })
 
@@ -574,6 +581,7 @@ def folha_ponto_view(request):
     }
     
     return render(request, 'core_rh/folha_ponto.html', context)
+
 def mascarar_email(email):
     if not email or '@' not in email: return email
     try:
@@ -618,103 +626,183 @@ class CustomPasswordResetDoneView(PasswordResetView):
         context['masked_email'] = self.request.session.get('reset_email_masked', '')
         return context
 
+# --- SUBSTITUA A FUNÇÃO area_gestor_view INTEIRA POR ESTA ---
 @login_required
 def area_gestor_view(request):
     try:
         gestor = Funcionario.objects.get(usuario=request.user)
-        equipes_lideradas = gestor.equipes_lideradas.all()
+        # Pega TODAS as equipes (exceto ocultas se não tiver permissão)
+        todas_equipes = Equipe.objects.filter(
+            Q(gestor=gestor) | Q(gestores=gestor)
+        ).distinct()
     except Funcionario.DoesNotExist:
         return redirect('home')
 
-    if not equipes_lideradas.exists() and not request.user.is_superuser:
+    if not todas_equipes.exists() and not request.user.is_superuser:
         return HttpResponse("Acesso negado. Você não é gestor de nenhuma equipe.")
 
-    # --- LÓGICA DE NAVEGAÇÃO ---
+    # Separa equipes
+    equipes_ponto = todas_equipes.filter(oculta=False)
+    equipes_km = todas_equipes.filter(oculta=True)
+
+    # --- LÓGICA DE DATAS (CORRIGIDA - NAVEGAÇÃO LIVRE) ---
     mes_real, ano_real = get_competencia_atual()
-    
     try:
-        mes_solicitado = int(request.GET.get('mes', mes_real))
-        ano_solicitado = int(request.GET.get('ano', ano_real))
+        mes = int(request.GET.get('mes', mes_real))
+        ano = int(request.GET.get('ano', ano_real))
     except ValueError:
-        mes_solicitado = mes_real
-        ano_solicitado = ano_real
+        mes, ano = mes_real, ano_real
 
-    # Define datas para navegação
-    mes_ant, ano_ant = get_competencia_anterior(mes_real, ano_real)
-    
-    # Variáveis de controle para os botões
-    nav_anterior = None
-    nav_proximo = None
-
-    # Se estou vendo o atual, posso ir para o anterior
-    if mes_solicitado == mes_real and ano_solicitado == ano_real:
-        nav_anterior = {'mes': mes_ant, 'ano': ano_ant}
-    
-    # Se estou vendo o anterior, posso ir para o atual (Próximo)
-    elif mes_solicitado == mes_ant and ano_solicitado == ano_ant:
-        nav_proximo = {'mes': mes_real, 'ano': ano_real}
-    
-    # Se a data for inválida, reseta para o atual
+    # Calcula Mês Anterior
+    if mes == 1:
+        mes_ant, ano_ant = 12, ano - 1
     else:
-        return redirect(f"{reverse('area_gestor')}?mes={mes_real}&ano={ano_real}")
-    
-    # ---------------------------
+        mes_ant, ano_ant = mes - 1, ano
+        
+    # Calcula Próximo Mês
+    if mes == 12:
+        mes_prox, ano_prox = 1, ano + 1
+    else:
+        mes_prox, ano_prox = mes + 1, ano
 
-    data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
+    nav_anterior = {'mes': mes_ant, 'ano': ano_ant}
+    nav_proximo = {'mes': mes_prox, 'ano': ano_prox}
+
+    # ==========================================
+    # LÓGICA DA ABA 1: PONTO
+    # ==========================================
+    data_inicio, data_fim = get_datas_competencia(mes, ano)
     
-    funcionarios = Funcionario.objects.filter(
-        equipe__in=equipes_lideradas
+    funcionarios_ponto = Funcionario.objects.filter(
+        Q(equipe__in=equipes_ponto) | Q(outras_equipes__in=equipes_ponto)
     ).exclude(id=gestor.id).distinct()
     
-    lista_equipe = []
-    
-    for func in funcionarios:
-        pontos = RegistroPonto.objects.filter(
-            funcionario=func, 
-            data__range=[data_inicio, data_fim]
-        )
-        
+    lista_ponto = []
+    for func in funcionarios_ponto:
+        pontos = RegistroPonto.objects.filter(funcionario=func, data__range=[data_inicio, data_fim])
         assinado_func = pontos.filter(assinado_funcionario=True).exists()
         assinado_gest = pontos.filter(assinado_gestor=True).exists()
-        pode_assinar = assinado_func and not assinado_gest
-        
         ponto_com_arquivo = pontos.exclude(arquivo_anexo='').first()
         url_arquivo = ponto_com_arquivo.arquivo_anexo.url if ponto_com_arquivo and ponto_com_arquivo.arquivo_anexo else None
-
-        nome_limpo = func.nome_completo.strip().replace(' ', '_')
-        nome_download = f"Folha_{nome_limpo}_{mes_solicitado:02d}_{ano_solicitado}.pdf"
-
-        lista_equipe.append({
+        
+        lista_ponto.append({
             'funcionario': func,
             'status_func': assinado_func,
             'status_gestor': assinado_gest,
-            'pode_assinar': pode_assinar,
-            'mes': mes_solicitado,
-            'ano': ano_solicitado,
+            'pode_assinar': assinado_func and not assinado_gest,
             'arquivo_assinado_url': url_arquivo,
-            'nome_download': nome_download,
+            'nome_download': f"Folha_{func.nome_completo}_{mes}_{ano}.pdf"
         })
 
+    # ==========================================
+    # LÓGICA DA ABA 2: KM
+    # ==========================================
+    semanas_do_mes = []
+    dados_km_semana_atual = []
+    equipe_km_selecionada = None
+    semana_selecionada = 1
+    
+    if equipes_km.exists():
+        # Seleciona equipe
+        km_team_id = request.GET.get('km_team')
+        if km_team_id:
+            equipe_km_selecionada = equipes_km.filter(id=km_team_id).first()
+        if not equipe_km_selecionada:
+            equipe_km_selecionada = equipes_km.first()
+
+        # Seleciona Semana
+        try: semana_selecionada = int(request.GET.get('semana', 1))
+        except: semana_selecionada = 1
+
+        # Calcula Semanas
+        cal = monthcalendar(ano, mes)
+        count_sem = 1
+        range_semana_atual = None
+
+        for week in cal:
+            dias_validos = [d for d in week if d != 0]
+            if not dias_validos: continue
+            
+            primeiro_dia = date(ano, mes, dias_validos[0])
+            inicio_semana = primeiro_dia - timedelta(days=primeiro_dia.weekday())
+            fim_semana = inicio_semana + timedelta(days=6)
+            
+            semanas_do_mes.append({
+                'numero': count_sem,
+                'inicio': inicio_semana,
+                'fim': fim_semana,
+                'active': (count_sem == semana_selecionada)
+            })
+            
+            if count_sem == semana_selecionada:
+                range_semana_atual = (inicio_semana, fim_semana)
+            
+            count_sem += 1
+
+        # Busca Dados da Semana
+        if range_semana_atual:
+            funcs_campo = Funcionario.objects.filter(
+                Q(equipe=equipe_km_selecionada) | Q(outras_equipes=equipe_km_selecionada)
+            ).distinct().order_by('nome_completo')
+
+            ini, fim = range_semana_atual
+            
+            for f in funcs_campo:
+                kms = ControleKM.objects.filter(funcionario=f, data__range=[ini, fim])
+                despesas = DespesaDiversa.objects.filter(funcionario=f, data__range=[ini, fim])
+                
+                total_km = sum(k.total_km for k in kms)
+                tem_algo = kms.exists() or despesas.exists()
+                status_geral = "Vazio"
+                ids_km = []
+                
+                if tem_algo:
+                    if kms.filter(status='Rejeitado').exists() or despesas.filter(status='Rejeitado').exists(): status_geral = 'Rejeitado'
+                    elif kms.filter(status='Pendente').exists() or despesas.filter(status='Pendente').exists(): status_geral = 'Pendente'
+                    elif kms.filter(status='Aprovado').exists() or despesas.filter(status='Aprovado').exists(): status_geral = 'Aprovado'
+                    elif kms.filter(status='Pago').exists() or despesas.filter(status='Pago').exists(): status_geral = 'Pago'
+                    ids_km = list(kms.values_list('id', flat=True))
+
+                dados_km_semana_atual.append({
+                    'funcionario': f,
+                    'total_km': total_km,
+                    'status': status_geral,
+                    'ids_km': ids_km,
+                    'tem_registro': tem_algo
+                })
+
     return render(request, 'core_rh/area_gestor.html', {
-        'lista_equipe': lista_equipe,
-        'mes_atual': mes_solicitado,
-        'ano_atual': ano_solicitado,
-        'nome_mes': f"{MESES_PT[mes_solicitado]}/{ano_solicitado}",
-        'nav_anterior': nav_anterior, # Passa o link para o template
-        'nav_proximo': nav_proximo,   # Passa o link para o template
+        'mes_atual': mes,
+        'ano_atual': ano,
+        'nome_mes': f"{MESES_PT[mes]}/{ano}",
+        'nav_anterior': nav_anterior, 
+        'nav_proximo': nav_proximo,
+        'equipes_ponto': equipes_ponto,
+        'lista_ponto': lista_ponto,
+        'equipes_km': equipes_km,
+        'equipe_km_selecionada': equipe_km_selecionada,
+        'semanas_do_mes': semanas_do_mes,
+        'dados_km_semana_atual': dados_km_semana_atual,
+        'semana_selecionada': semana_selecionada
     })
 @login_required
 def assinar_ponto_gestor(request, func_id, mes, ano):
     if request.method != 'POST':
         return redirect('area_gestor')
+    
     gestor = Funcionario.objects.get(usuario=request.user)
-    equipes_gestor = gestor.equipes_lideradas.all()
+    
+    # --- CORREÇÃO: Busca Unificada ---
+    equipes_gestor = Equipe.objects.filter(
+        Q(oculta=False) & (Q(gestor=gestor) | Q(gestores=gestor))
+    )
+    
     alvo = Funcionario.objects.get(id=func_id)
     
-    
+    # Equipes do alvo (Principal + Secundárias)
     equipes_alvo = [alvo.equipe] + list(alvo.outras_equipes.all())
-    equipes_gestor = gestor.equipes_lideradas.all()
     
+    # Verifica intersecção: Existe alguma equipe que o alvo faz parte E que o gestor lidera?
     is_authorized = any(e in equipes_gestor for e in equipes_alvo if e)
 
     if not is_authorized and not request.user.is_superuser:
@@ -737,10 +825,8 @@ def assinar_ponto_gestor(request, func_id, mes, ano):
             
             registros.update(assinado_gestor=True)
             
-            
             registro_com_arquivo = registros.exclude(arquivo_anexo='').first()
             target_reg = registro_com_arquivo if registro_com_arquivo else registros.first()
-            
             
             target_reg.arquivo_anexo = arquivo
             target_reg.save()
@@ -791,7 +877,6 @@ def rh_summary_view(request):
     if not usuario_eh_rh(request.user):
         return HttpResponse("Acesso negado.", status=403)
     
-    # --- LÓGICA DE NAVEGAÇÃO ---
     mes_real, ano_real = get_competencia_atual()
     try:
         mes_solicitado = int(request.GET.get('mes', mes_real))
@@ -810,11 +895,12 @@ def rh_summary_view(request):
         nav_proximo = {'mes': mes_real, 'ano': ano_real}
     else:
         return redirect(f"{reverse('rh_summary')}?mes={mes_real}&ano={ano_real}")
-    # ---------------------------
 
     data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
     
-    todas_equipes = Equipe.objects.all().order_by('nome')
+    # --- CORREÇÃO: RH vê todas as equipes, MENOS AS OCULTAS ---
+    todas_equipes = Equipe.objects.filter(oculta=False).order_by('nome')
+    
     resumo_rh = []
     
     for equipe in todas_equipes:
@@ -847,8 +933,8 @@ def rh_summary_view(request):
 
     return render(request, 'core_rh/rh_summary.html', {
         'resumo_rh': resumo_rh,
-        'mes_atual': MESES_PT.get(mes_solicitado), # Nome do mês
-        'mes_num': mes_solicitado, # Número para links
+        'mes_atual': MESES_PT.get(mes_solicitado), 
+        'mes_num': mes_solicitado, 
         'ano_atual': ano_solicitado,
         'nav_anterior': nav_anterior,
         'nav_proximo': nav_proximo,
@@ -861,7 +947,6 @@ def rh_team_detail_view(request, equipe_id):
 
     equipe = get_object_or_404(Equipe, id=equipe_id)
     
-    # --- LÓGICA DE NAVEGAÇÃO ---
     mes_real, ano_real = get_competencia_atual()
     try:
         mes_solicitado = int(request.GET.get('mes', mes_real))
@@ -880,7 +965,6 @@ def rh_team_detail_view(request, equipe_id):
         nav_proximo = {'mes': mes_real, 'ano': ano_real}
     else:
         return redirect(f"{reverse('rh_team_detail', args=[equipe_id])}?mes={mes_real}&ano={ano_real}")
-    # ---------------------------
 
     data_inicio, data_fim = get_datas_competencia(mes_solicitado, ano_solicitado)
 
@@ -928,60 +1012,50 @@ def rh_batch_download_view(request, equipe_id):
     Gera um ZIP com todos os PDFs assinados da equipe no mês selecionado.
     Em caso de erro, redireciona de volta para a página atual com um alerta.
     """
-    # 1. Captura parâmetros e Equipe
     equipe = get_object_or_404(Equipe, pk=equipe_id)
     mes = request.GET.get('mes')
     ano = request.GET.get('ano')
 
-    # Validação básica
     if not mes or not ano:
         messages.error(request, "Mês e Ano não informados para download.")
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
-    # 2. Busca os registros com arquivo assinado
     registros = RegistroPonto.objects.filter(
         funcionario__equipe=equipe,
         data__month=mes,
         data__year=ano
     ).exclude(arquivo_anexo='').exclude(arquivo_anexo__isnull=True)
 
-    # 3. Se não tiver arquivos, avisa e volta (NÃO renderiza página antiga)
     if not registros.exists():
         messages.warning(request, f"Nenhum ponto assinado encontrado para a equipe {equipe.nome} em {mes}/{ano}.")
-        # O segredo: volta para a página de onde veio (o Admin)
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
-    # 4. Gera o ZIP em memória
     zip_buffer = io.BytesIO()
     arquivos_adicionados = 0
 
     with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
         for ponto in registros:
             try:
-                # Caminho físico do arquivo
                 file_path = ponto.arquivo_anexo.path
                 if os.path.exists(file_path):
-                    # Nome bonito dentro do ZIP: "NomeFuncionario_Data.pdf"
                     file_name = f"{ponto.funcionario.nome_completo}_{ponto.data.strftime('%d-%m-%Y')}.pdf"
                     zip_file.write(file_path, file_name)
                     arquivos_adicionados += 1
             except Exception as e:
-                # Loga o erro mas tenta continuar com os outros
                 print(f"Erro ao adicionar arquivo {ponto}: {e}")
                 continue
 
-    # 5. Verifica se o ZIP não ficou vazio (arquivos podem não existir no disco)
     if arquivos_adicionados == 0:
         messages.error(request, "Arquivos físicos não encontrados no servidor.")
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
-    # 6. Finaliza e entrega o download
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer, content_type='application/zip')
     nome_zip = f"Pontos_{equipe.nome}_{mes}_{ano}.zip"
     response['Content-Disposition'] = f'attachment; filename="{nome_zip}"'
     
     return response
+
 @login_required
 def rh_unlock_timesheet_view(request, func_id, mes, ano):
     if not usuario_eh_rh(request.user):
@@ -1001,8 +1075,6 @@ def rh_unlock_timesheet_view(request, func_id, mes, ano):
     else:
         messages.error(request, "Nenhum registro encontrado para desbloquear.")
 
-    # ALTERAÇÃO: Redireciona para a página de onde veio (HTTP_REFERER)
-    # Isso permite que funcione tanto dentro do Admin quanto no Painel de RH sem mudar de tela.
     return redirect(request.META.get('HTTP_REFERER', '/'))
 
 @login_required
@@ -1036,22 +1108,13 @@ def format_delta(td):
     minutes = (total_seconds % 3600) // 60
     return f"{hours:02}:{minutes:02}"
 
-# core_rh/views.py (Adicione ao final)
-
-# --- COLE ISTO NO FINAL DO ARQUIVO core_rh/views.py ---
-
 @login_required
 def admin_ponto_partial_view(request, func_id):
-    """
-    Retorna o HTML da folha de ponto individual para a aba do Admin.
-    """
-    # Verifica se é RH ou Superuser
     if not usuario_eh_rh(request.user):
         return HttpResponse("Acesso negado", status=403)
 
     funcionario = get_object_or_404(Funcionario, pk=func_id)
     
-    # 1. Datas e Navegação
     mes_real, ano_real = get_competencia_atual()
     try:
         mes = int(request.GET.get('mes', mes_real))
@@ -1059,16 +1122,13 @@ def admin_ponto_partial_view(request, func_id):
     except ValueError:
         mes, ano = mes_real, ano_real
 
-    # Navegação Mês Anterior
     mes_ant, ano_ant = get_competencia_anterior(mes, ano)
     
-    # Navegação Mês Próximo
     if mes == 12:
         mes_prox, ano_prox = 1, ano + 1
     else:
         mes_prox, ano_prox = mes + 1, ano
 
-    # 2. Busca Registros (Usando a função correta get_datas_competencia)
     data_inicio, data_fim = get_datas_competencia(mes, ano)
     
     registros = RegistroPonto.objects.filter(
@@ -1079,7 +1139,6 @@ def admin_ponto_partial_view(request, func_id):
     registros_dict = {r.data.day: r for r in registros}
     dias_do_mes = []
     
-    # Feriados
     feriados_br = holidays.BR(state='DF', years=ano)
     if hasattr(funcionario, 'estado_sigla') and funcionario.estado_sigla:
          try:
@@ -1112,147 +1171,104 @@ def admin_ponto_partial_view(request, func_id):
         'is_admin_view': True, 
     }
 
-    # Reutiliza parte do template para não duplicar código
     return render(request, 'core_rh/includes/folha_ponto_content.html', context)
 
 
-# core_rh/views.py
-
-# core_rh/views.py
-
 @login_required
 def admin_gestor_partial_view(request):
-    """
-    View parcial do painel de RH (renderizada via AJAX).
-    Gerencia tanto o Modo Lista (Funcionários) quanto o Modo Resumo (Equipes).
-    """
-    if not usuario_eh_rh(request.user):
-        return HttpResponse('<div class="alert alert-danger">Acesso Negado.</div>', status=403)
-
-    # 1. Parâmetros
-    mes_real, ano_real = get_competencia_atual()
+    # 1. Identificação e Permissão Unificada
+    user = request.user
+    is_rh = usuario_eh_rh(user)
+    funcionario = None
+    
     try:
-        mes = int(request.GET.get('mes', mes_real))
-        ano = int(request.GET.get('ano', ano_real))
-        mode = request.GET.get('mode', 'list')
-        equipe_id = request.GET.get('equipe_id', '')
-        estado_filtro = request.GET.get('estado', '') # Filtro de UF
-        q = request.GET.get('q', '').strip() # Busca
-    except ValueError:
-        mes, ano = mes_real, ano_real
-        mode = 'list'
-        equipe_id = ''
-        estado_filtro = ''
-        q = ''
+        funcionario = user.funcionario
+    except AttributeError:
+        if not is_rh: return HttpResponse("Negado", status=403)
 
-    # 2. Navegação de Datas
-    mes_ant, ano_ant = get_competencia_anterior(mes, ano)
-    if mes == 12: mes_prox, ano_prox = 1, ano + 1
-    else: mes_prox, ano_prox = mes + 1, ano
-
-    nav_anterior = {'mes': mes_ant, 'ano': ano_ant}
-    nav_proximo = {'mes': mes_prox, 'ano': ano_prox}
-    data_inicio, data_fim = get_datas_competencia(mes, ano)
-
-    context = {
-        'mes_atual': mes,
-        'ano_atual': ano,
-        'nome_mes': f"{MESES_PT.get(mes)}/{ano}",
-        'nav_anterior': nav_anterior,
-        'nav_proximo': nav_proximo,
-        'mode': mode,
-        'q': q,
-        'equipe_id': equipe_id,
-        'estado_filtro': estado_filtro,
-    }
-
-    # --- MODO RESUMO (CARDS DAS EQUIPES) ---
-    if mode == 'summary':
-        todas_equipes = Equipe.objects.all().order_by('nome')
-        
-        # Filtro de Busca (Nome da Equipe)
-        if q:
-            todas_equipes = todas_equipes.filter(nome__icontains=q)
-
-        resumo_rh = []
-        for equipe in todas_equipes:
-            membros = Funcionario.objects.filter(Q(equipe=equipe) | Q(outras_equipes=equipe)).distinct()
-            total = membros.count()
-            assinados = RegistroPonto.objects.filter(
-                funcionario__in=membros, data__range=[data_inicio, data_fim], assinado_gestor=True
-            ).values('funcionario').distinct().count()
-            
-            progresso = int((assinados / total * 100)) if total > 0 else 0
-            
-            resumo_rh.append({
-                'equipe': equipe,
-                'total_membros': total,
-                'total_assinados': assinados,
-                'progresso': progresso
-            })
-        context['resumo_rh'] = resumo_rh
-
-    # --- MODO LISTA (TABELA DE FUNCIONÁRIOS) ---
+    # Definição das Equipes Permitidas
+    if is_rh:
+        # RH vê tudo não oculto
+        equipes_permitidas = Equipe.objects.filter(oculta=False).order_by('nome')
     else:
-        funcionarios_query = Funcionario.objects.filter(usuario__is_active=True)
-        
-        # 1. Filtro de Estado (UF)
-        if estado_filtro:
-            funcionarios_query = funcionarios_query.filter(local_trabalho_estado=estado_filtro)
+        # Gestor vê Principal OU Secundário, excluindo ocultas
+        equipes_permitidas = Equipe.objects.filter(
+            Q(oculta=False) & (Q(gestor=funcionario) | Q(gestores=funcionario))
+        ).distinct().order_by('nome')
 
-        # 2. Filtro de Equipe
-        if equipe_id:
-            try:
-                eq = Equipe.objects.get(id=equipe_id)
-                funcionarios_query = funcionarios_query.filter(Q(equipe=eq) | Q(outras_equipes=eq))
-            except: pass
+    if not is_rh and not equipes_permitidas.exists():
+        return HttpResponse('<div class="alert alert-warning">Você não gerencia nenhuma equipe ativa.</div>', status=403)
+
+    # 2. Filtros e Datas
+    ma, aa = get_competencia_atual()
+    try: 
+        m=int(request.GET.get('mes', ma))
+        a=int(request.GET.get('ano', aa))
+        mode=request.GET.get('mode', 'list')
+        eq_id=request.GET.get('equipe_id', '')
+        q=request.GET.get('q', '').strip()
+        est=request.GET.get('estado', '')
+    except: m,a,mode,eq_id,q,est = ma,aa,'list','','',''
+    
+    mp, ap = get_competencia_anterior(m, a)
+    mpr, apr = (1, a+1) if m==12 else (m+1, a)
+    nav_ant = {'mes': mp, 'ano': ap}; nav_prox = {'mes': mpr, 'ano': apr}
+    di, df = get_datas_competencia(m, a)
+    
+    ctx = {
+        'mes_atual': m, 'ano_atual': a, 
+        'nome_mes': f"{MESES_PT.get(m)}/{a}", 
+        'nav_anterior': nav_ant, 'nav_proximo': nav_prox, 
+        'mode': mode, 'q': q, 'equipe_id': eq_id, 'estado_filtro': est,
+        'todas_equipes': equipes_permitidas # Popula o dropdown
+    }
+    
+    # 3. Modo Resumo (Cards)
+    if mode == 'summary':
+        qs_resumo = equipes_permitidas
+        if q: qs_resumo = qs_resumo.filter(nome__icontains=q)
         
-        # 3. Busca Texto (Nome do Funcionário)
-        if q:
-            funcionarios_query = funcionarios_query.filter(nome_completo__icontains=q)
-            
-        funcionarios = funcionarios_query.distinct().order_by('nome_completo')
+        res = []
+        for e in qs_resumo:
+            mem = Funcionario.objects.filter(Q(equipe=e)|Q(outras_equipes=e)).distinct()
+            ass = RegistroPonto.objects.filter(funcionario__in=mem, data__range=[di, df], assinado_gestor=True).values('funcionario').distinct().count()
+            tot = mem.count()
+            res.append({'equipe': e, 'total_membros': tot, 'total_assinados': ass, 'progresso': int(ass/tot*100) if tot>0 else 0})
+        ctx['resumo_rh'] = res
         
-        # Dados da Tabela
-        lista_colaboradores = []
-        for func in funcionarios:
-            pontos = RegistroPonto.objects.filter(funcionario=func, data__range=[data_inicio, data_fim])
+    # 4. Modo Lista (Tabela)
+    else:
+        fq = Funcionario.objects.filter(usuario__is_active=True)
+        if est: fq = fq.filter(local_trabalho_estado=est)
+        
+        if eq_id: 
+            # Filtro Seguro
+            if equipes_permitidas.filter(id=eq_id).exists():
+                fq = fq.filter(Q(equipe_id=eq_id)|Q(outras_equipes__id=eq_id))
+            else:
+                fq = fq.none()
+        else:
+            # Visão Geral das permitidas
+            fq = fq.filter(Q(equipe__in=equipes_permitidas)|Q(outras_equipes__in=equipes_permitidas))
             
-            status_func = pontos.filter(assinado_funcionario=True).exists()
-            status_gestor = pontos.filter(assinado_gestor=True).exists()
-            reg_anexo = pontos.exclude(arquivo_anexo='').first()
-            url_anexo = reg_anexo.arquivo_anexo.url if reg_anexo and reg_anexo.arquivo_anexo else None
-            
-            lista_colaboradores.append({
-                'funcionario': func,
-                'status_func': status_func,
-                'status_gestor': status_gestor,
-                'arquivo_anexo': url_anexo,
-                'nome_download': f"Folha_{func.nome_completo.strip().replace(' ', '_')}_{mes:02d}_{ano}.pdf",
-                'mes': mes, 
-                'ano': ano
+        if q: fq = fq.filter(nome_completo__icontains=q)
+        
+        lst = []
+        for f in fq.distinct().order_by('nome_completo'):
+            pts = RegistroPonto.objects.filter(funcionario=f, data__range=[di, df])
+            lst.append({
+                'funcionario': f, 
+                'status_func': pts.filter(assinado_funcionario=True).exists(), 
+                'status_gestor': pts.filter(assinado_gestor=True).exists(), 
+                'arquivo_anexo': pts.exclude(arquivo_anexo='').first().arquivo_anexo.url if pts.exclude(arquivo_anexo='').exists() else None, 
+                'nome_download': f"Folha_{f.nome_completo}_{m}_{a}.pdf", 
+                'mes': m, 'ano': a
             })
-            
-        context['lista_colaboradores'] = lista_colaboradores
+        ctx['lista_colaboradores'] = lst
+        ctx['estados_disponiveis'] = fq.exclude(local_trabalho_estado__isnull=True).values_list('local_trabalho_estado', flat=True).distinct()
+        
+    return render(request, 'core_rh/includes/rh_area_moderno.html', ctx)
 
-        # --- DADOS PARA OS DROPDOWNS (FILTROS) ---
-        # A. Estados Disponíveis
-        context['estados_disponiveis'] = Funcionario.objects.exclude(local_trabalho_estado__isnull=True)\
-                                            .exclude(local_trabalho_estado='')\
-                                            .values_list('local_trabalho_estado', flat=True)\
-                                            .distinct().order_by('local_trabalho_estado')
-
-        # B. Equipes (Filtradas pelo Estado selecionado)
-        equipes_qs = Equipe.objects.all().order_by('nome')
-        if estado_filtro:
-            ids_equipes_estado = Funcionario.objects.filter(local_trabalho_estado=estado_filtro)\
-                                    .values_list('equipe_id', flat=True).distinct()
-            equipes_qs = equipes_qs.filter(id__in=ids_equipes_estado)
-            
-        context['todas_equipes'] = equipes_qs
-
-    return render(request, 'core_rh/includes/rh_area_moderno.html', context)
-# --- Certifique-se que isso está no final do core_rh/views.py ---
 try:
     from .models import Ferias
 except ImportError:
@@ -1293,25 +1309,17 @@ def upload_ferias_view(request, ferias_id):
         messages.success(request, "Arquivo enviado com sucesso!")
         
     return redirect('minhas_ferias')
-try:
-    from weasyprint import HTML, CSS
-except ImportError:
-    pass
 
 @login_required
-@login_required
 def gerar_aviso_ferias_pdf(request, ferias_id):
-    # Garante que é admin ou RH para gerar
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
         return redirect('home')
         
     ferias = get_object_or_404(Ferias, id=ferias_id)
     func = ferias.funcionario
     
-    # Dados calculados
     dias_ferias = (ferias.data_fim - ferias.data_inicio).days + 1
     
-    # HTML do Documento
     html_string = render_to_string('core_rh/pdf_aviso_ferias.html', {
         'ferias': ferias,
         'func': func,
@@ -1319,33 +1327,31 @@ def gerar_aviso_ferias_pdf(request, ferias_id):
         'hoje': timezone.now()
     })
 
-    # Gera o PDF
-    # 'optimize_size' ajuda um pouco na velocidade e tamanho final
-    html = HTML(string=html_string)
-    pdf_file = html.write_pdf(optimize_size=('fonts', 'images'))
+    try:
+        from weasyprint import HTML
+        html = HTML(string=html_string)
+        pdf_file = html.write_pdf(optimize_size=('fonts', 'images'))
+        
+        nome_func = func.nome_completo.strip().replace(' ', '_')
+        periodo_limpo = ferias.periodo_aquisitivo.replace('/', '-')
+        filename = f"Notificação_de_Férias-{nome_func}-{periodo_limpo}.pdf"
 
-    # Configura o nome do arquivo
-    nome_func = func.nome_completo.strip().replace(' ', '_')
-    periodo_limpo = ferias.periodo_aquisitivo.replace('/', '-')
-    filename = f"Notificação_de_Férias-{nome_func}-{periodo_limpo}.pdf"
+        response = HttpResponse(pdf_file, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+    except ImportError:
+        return HttpResponse(html_string)
 
-    # Retorna para download (attachment força o download)
-    response = HttpResponse(pdf_file, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
-    return response
 @login_required
 def admin_ferias_partial_view(request):
-    # --- CORREÇÃO AQUI: Usa a função usuario_eh_rh em vez de só is_staff ---
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
         return HttpResponse("Acesso negado", status=403)
-    # Filtros Básicos
+    
     q = request.GET.get('q', '').strip()
     status_filtro = request.GET.get('status', '')
     mes = request.GET.get('mes')
     ano = request.GET.get('ano')
 
-    # Data Base para Navegação (Padrão: Hoje)
     hoje = timezone.now().date()
     try:
         ano = int(ano) if ano else hoje.year
@@ -1354,52 +1360,43 @@ def admin_ferias_partial_view(request):
     except:
         data_base = hoje
 
-    # Navegação Anterior/Próximo
     mes_ant = data_base.month - 1 if data_base.month > 1 else 12
     ano_ant = data_base.year if data_base.month > 1 else data_base.year - 1
     
     mes_prox = data_base.month + 1 if data_base.month < 12 else 1
     ano_prox = data_base.year if data_base.month < 12 else data_base.year + 1
 
-    # QuerySet Inicial (Férias que cruzam o mês selecionado)
-    # Lógica: Início <= Fim do Mês E Fim >= Início do Mês
     ultimo_dia_mes = monthrange(data_base.year, data_base.month)[1]
     data_fim_mes = date(data_base.year, data_base.month, ultimo_dia_mes)
     
-    # Importação lazy para evitar erro circular
-    from .models import Ferias, Funcionario
+    from .models import Ferias
     
     ferias_qs = Ferias.objects.filter(
         data_inicio__lte=data_fim_mes,
         data_fim__gte=data_base
     ).select_related('funcionario', 'funcionario__equipe')
 
-    # Filtro de Busca (Nome ou Matrícula)
     if q:
         ferias_qs = ferias_qs.filter(
             Q(funcionario__nome_completo__icontains=q) | 
             Q(funcionario__matricula__icontains=q)
         )
 
-    # Filtro de Status
     if status_filtro:
         ferias_qs = ferias_qs.filter(status=status_filtro)
 
-    # Ordenação
     ferias_qs = ferias_qs.order_by('data_inicio')
 
     context = {
         'lista_ferias': ferias_qs,
         'mes_atual': data_base.month,
         'ano_atual': data_base.year,
-        'nome_mes': data_base.strftime('%B').capitalize(), # Requer locale pt-br configurado ou array manual
         'nav_anterior': {'mes': mes_ant, 'ano': ano_ant},
         'nav_proximo': {'mes': mes_prox, 'ano': ano_prox},
         'q': q,
         'status_filtro': status_filtro,
     }
     
-    # Dicionário simples de meses para garantir PT-BR
     meses = {1:'Janeiro', 2:'Fevereiro', 3:'Março', 4:'Abril', 5:'Maio', 6:'Junho', 
              7:'Julho', 8:'Agosto', 9:'Setembro', 10:'Outubro', 11:'Novembro', 12:'Dezembro'}
     context['nome_mes'] = f"{meses.get(data_base.month)} {data_base.year}"
@@ -1410,7 +1407,6 @@ def admin_ferias_partial_view(request):
 def meus_contracheques(request):
     try:
         funcionario = request.user.funcionario
-        # Pega todos os contracheques desse funcionário
         lista = Contracheque.objects.filter(funcionario=funcionario).order_by('-ano', '-mes')
     except AttributeError:
         lista = []
@@ -1428,10 +1424,8 @@ def assinar_contracheque_local(request, pk):
                 funcionario = contracheque.funcionario
                 nome_assinatura = funcionario.nome_completo.strip().upper()
                 
-                # Abre o arquivo
                 pdf_io = io.BytesIO(contracheque.arquivo.read())
                 
-                # Plumber para análise geométrica
                 plumber_pdf = pdfplumber.open(pdf_io)
                 pdf_io.seek(0)
                 reader = PdfReader(pdf_io)
@@ -1442,94 +1436,69 @@ def assinar_contracheque_local(request, pk):
                         p_page = plumber_pdf.pages[i]
                         altura_pagina = float(page.mediabox.height)
                         
-                        # 1. Encontrar a âncora de Texto ("ASSINATURA")
                         palavras = p_page.search("ASSINATURA") or \
                                    p_page.search("EMPREGADO")
                         
-                        # Valores padrão iniciais (caso seja imagem escaneada sem linhas vetoriais)
                         pos_x = 400
                         pos_y_base = 50
                         largura_final = 250
                         
                         if palavras:
-                            target = palavras[-1] # Pega a última ocorrência (rodapé)
+                            target = palavras[-1] 
                             centro_texto = (target['x0'] + target['x1']) / 2
                             
-                            # --- 2. DETECÇÃO CIRÚRGICA DA LINHA ---
                             linha_exata = None
                             
-                            # Define uma "zona de caça" restrita:
-                            # A linha tem que estar ACIMA do texto, mas MUITO PERTO (máx 25pts / ~8mm)
-                            # Se procurar muito alto, pega a tabela de valores (erro anterior)
                             limite_busca_inferior = target['top'] - 25 
                             limite_busca_superior = target['top'] 
                             
-                            # Varre todas as linhas desenhadas na página
                             for linha in p_page.lines:
-                                # Filtra apenas linhas horizontais (top == bottom)
                                 if abs(linha['top'] - linha['bottom']) < 2:
                                     
-                                    # Verifica se a linha está na "zona de caça" vertical
                                     if limite_busca_inferior < linha['bottom'] < limite_busca_superior:
                                         
-                                        # Verifica se a linha está alinhada com o texto (passa por cima dele)
-                                        # O centro do texto deve estar contido na largura da linha
                                         if linha['x0'] < centro_texto < linha['x1']:
                                             linha_exata = linha
-                                            break # Achamos a linha da assinatura!
+                                            break 
                             
                             if linha_exata:
-                                # [SUCESSO] Usa as dimensões reais da linha encontrada
                                 pos_x = linha_exata['x0']
                                 largura_final = linha_exata['x1'] - linha_exata['x0']
                                 
-                                # Converte Y do Plumber (topo) para ReportLab (fundo)
                                 pos_y_base = altura_pagina - linha_exata['bottom']
-                                
-                                print(f"Linha vetorial detectada! Largura: {largura_final}")
                             else:
-                                # [FALLBACK] Se não achou linha (ex: PDF imagem), calcula uma largura dinâmica
-                                # baseada no tamanho da palavra "ASSINATURA"
                                 largura_texto = target['x1'] - target['x0']
-                                largura_final = largura_texto * 3 # Estipula 3x o tamanho da palavra
-                                if largura_final < 200: largura_final = 200 # Mínimo seguro
+                                largura_final = largura_texto * 3 
+                                if largura_final < 200: largura_final = 200 
                                 
                                 pos_x = centro_texto - (largura_final / 2)
                                 pos_y_base = altura_pagina - target['bottom']
 
-                        # --- 3. DESENHO (WHITEOUT + NOME) ---
                         packet = io.BytesIO()
                         can = canvas.Canvas(packet, pagesize=A4)
                         
-                        # Ajustes da área de limpeza
-                        rect_h = 32 # Altura compacta
-                        rect_y = pos_y_base - 2 # Desce um pouco para cobrir descenders
+                        rect_h = 32 
+                        rect_y = pos_y_base - 2 
                         
-                        # A. Apagar Linha Antiga (Retângulo Branco)
                         can.setFillColor(colors.white)
                         can.rect(pos_x, rect_y, largura_final, rect_h, stroke=0, fill=1)
                         
-                        # B. Escrever Nome (Ajuste automático de fonte)
                         font_size = 10
                         nome_width = can.stringWidth(nome_assinatura, "Helvetica-Bold", font_size)
                         
-                        # Se o nome for maior que a linha, reduz a fonte para caber
                         if nome_width > largura_final:
                             font_size = font_size * (largura_final / nome_width) * 0.95
                         
                         can.setFillColor(colors.black)
                         can.setFont("Helvetica-Bold", font_size)
                         
-                        # Centraliza o nome na largura detectada
                         centro_area = pos_x + (largura_final / 2)
                         can.drawCentredString(centro_area, rect_y + 12, nome_assinatura)
                         
-                        # C. Desenhar Linha Nova (Exatamente em cima da antiga)
                         can.setLineWidth(0.5)
                         y_linha = rect_y + 10
                         can.line(pos_x, y_linha, pos_x + largura_final, y_linha)
                         
-                        # D. Reescrever "ASSINATURA"
                         can.setFont("Helvetica", 6)
                         can.drawCentredString(centro_area, rect_y + 2, "ASSINATURA")
                         
@@ -1545,7 +1514,6 @@ def assinar_contracheque_local(request, pk):
                 
                 plumber_pdf.close()
                 
-                # Salva PDF Final
                 pdf_output = io.BytesIO()
                 writer.write(pdf_output)
                 
@@ -1563,14 +1531,9 @@ def assinar_contracheque_local(request, pk):
                 messages.error(request, f"Erro: {str(e)}")
         
         return redirect('meus_contracheques')
-try:
-    from pypdf import PdfReader, PdfWriter
-except ImportError:
-    PdfReader = None
-    PdfWriter = None
+
 @login_required
 def admin_contracheque_partial(request):
-    # 1. Filtros de Data e Busca
     hoje = timezone.now()
     try:
         mes_atual = int(request.GET.get('mes', hoje.month))
@@ -1581,23 +1544,19 @@ def admin_contracheque_partial(request):
 
     termo_busca = request.GET.get('q', '').strip()
 
-    # 2. Navegação (Mês Anterior / Próximo)
     mes_anterior = mes_atual - 1 if mes_atual > 1 else 12
     ano_anterior = ano_atual if mes_atual > 1 else ano_atual - 1
     
     mes_proximo = mes_atual + 1 if mes_atual < 12 else 1
     ano_proximo = ano_atual if mes_atual < 12 else ano_atual + 1
 
-    # 3. Buscar Funcionários
     funcionarios = Funcionario.objects.all().order_by('nome_completo')
     
     if termo_busca:
         funcionarios = funcionarios.filter(nome_completo__icontains=termo_busca)
 
-    # 4. Montar a Lista com Status
     lista_equipe = []
     
-    # Busca otimizada dos contracheques do mês
     contracheques_mes = {
         cc.funcionario_id: cc 
         for cc in Contracheque.objects.filter(mes=mes_atual, ano=ano_atual)
@@ -1616,7 +1575,6 @@ def admin_contracheque_partial(request):
             'assinado': status_assinatura
         })
 
-    # 5. Contexto para o Template
     context = {
         'lista_equipe': lista_equipe,
         'mes_atual': mes_atual,
@@ -1628,27 +1586,7 @@ def admin_contracheque_partial(request):
         'meses_choices': Contracheque.MESES, 
     }
     
-    # Aponta para o include que você criou
     return render(request, 'core_rh/includes/rh_contracheque_moderno.html', context)
-
-# Certifique-se de ter este import no topo:
-from django.urls import reverse
-
-# Em core_rh/views.py
-
-# Certifique-se de ter os imports:
-from django.urls import reverse
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.core.files.base import ContentFile
-import io
-
-try:
-    from pypdf import PdfReader, PdfWriter
-except ImportError:
-    PdfReader = None
-    PdfWriter = None
 
 @login_required
 def gerenciar_contracheques(request):
@@ -1673,7 +1611,6 @@ def gerenciar_contracheques(request):
         mes_upload = int(request.POST.get('mes_upload'))
         ano_upload = int(request.POST.get('ano_upload'))
         
-        # Data apenas para desenho (NÃO SALVA NO BANCO)
         data_str = request.POST.get('data_recebimento')
         data_para_pdf = None
         if data_str:
@@ -1704,7 +1641,6 @@ def gerenciar_contracheques(request):
             if encontrou_func:
                 writer = PdfWriter()
                 
-                # --- APLICA A DATA VISUALMENTE (SEM ASSINAR NO SISTEMA) ---
                 if data_para_pdf:
                     try:
                         p_page = plumber_pdf.pages[i]
@@ -1733,11 +1669,9 @@ def gerenciar_contracheques(request):
                             packet = io.BytesIO()
                             can = canvas.Canvas(packet, pagesize=A4)
                             
-                            # 1. Apaga área antiga
                             can.setFillColor(colors.white)
                             can.rect(rect_x, rect_y - 2, rect_w, rect_h + 4, stroke=0, fill=1)
                             
-                            # 2. Escreve Data Nova
                             altura_legenda = target['bottom'] - target['top']
                             tamanho_fonte_data = altura_legenda * 1.8
                             if tamanho_fonte_data < 12: tamanho_fonte_data = 12
@@ -1750,7 +1684,6 @@ def gerenciar_contracheques(request):
                             can.setFont("Helvetica-Bold", tamanho_fonte_data)
                             can.drawString(pos_data_x, pos_data_y, data_para_pdf.strftime("%d/%m/%Y"))
 
-                            # 3. Refaz linha e legenda
                             can.setLineWidth(0.5)
                             can.line(rect_x, rect_y + 8, rect_x + rect_w, rect_y + 8)
                             can.setFont("Helvetica", 6)
@@ -1761,18 +1694,15 @@ def gerenciar_contracheques(request):
                             overlay = PdfReader(packet)
                             page.merge_page(overlay.pages[0])
                     except Exception:
-                        pass # Segue sem data se der erro no desenho
+                        pass
 
                 writer.add_page(page)
                 pdf_bytes = io.BytesIO()
                 writer.write(pdf_bytes)
                 
-                # --- SALVA NO BANCO (SEM DATA_CIENCIA) ---
-                # Removemos a lógica que setava data_ciencia aqui
-                
                 cc, created = Contracheque.objects.update_or_create(
                     funcionario=funcionario_encontrado, mes=mes_upload, ano=ano_upload,
-                    defaults={'arquivo': None} # Reseta arquivo para salvar o novo
+                    defaults={'arquivo': None}
                 )
                 
                 nome_arq = f"holerite_{funcionario_encontrado.id}_{mes_upload}_{ano_upload}.pdf"
@@ -1800,6 +1730,7 @@ def gerenciar_contracheques(request):
 
     except Exception as e:
         return render(request, 'core_rh/upload_log.html', {'erro_critico': str(e), 'next_url': next_url})
+
 @login_required
 def upload_individual_contracheque(request, func_id):
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
@@ -1813,7 +1744,6 @@ def upload_individual_contracheque(request, func_id):
             mes = int(request.POST.get('mes'))
             ano = int(request.POST.get('ano'))
             
-            # Data Opcional (apenas para desenho)
             data_str = request.POST.get('data_recebimento_individual')
             data_para_pdf = None
             if data_str:
@@ -1823,7 +1753,6 @@ def upload_individual_contracheque(request, func_id):
             messages.error(request, "Dados inválidos.")
             return redirect(request.META.get('HTTP_REFERER', '/'))
 
-        # --- PROCESSAMENTO DO PDF INDIVIDUAL (MESMA LÓGICA) ---
         try:
             arquivo.seek(0)
             plumber_pdf = pdfplumber.open(arquivo)
@@ -1853,7 +1782,6 @@ def upload_individual_contracheque(request, func_id):
                             packet = io.BytesIO()
                             can = canvas.Canvas(packet, pagesize=A4)
                             
-                            # Desenha Branco e Data
                             can.setFillColor(colors.white)
                             can.rect(rect_x, rect_y - 2, rect_w, rect_h + 4, stroke=0, fill=1)
                             
@@ -1881,7 +1809,6 @@ def upload_individual_contracheque(request, func_id):
             pdf_bytes = io.BytesIO()
             writer.write(pdf_bytes)
             
-            # SALVA NO BANCO (SEM CONFIRMAR ASSINATURA)
             cc, created = Contracheque.objects.update_or_create(
                 funcionario=funcionario, mes=mes, ano=ano,
                 defaults={'arquivo': None}
@@ -1896,6 +1823,7 @@ def upload_individual_contracheque(request, func_id):
             messages.error(request, f"Erro ao processar arquivo: {e}")
         
     return redirect(request.META.get('HTTP_REFERER', '/'))
+
 @login_required
 def excluir_contracheque(request, cc_id):
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
@@ -1917,7 +1845,6 @@ def meus_atestados_view(request):
 
     if request.method == 'POST':
         try:
-            # Captura os dados manuais para ter controle total
             tipo = request.POST.get('tipo')
             data = request.POST.get('data_inicio')
             arquivo = request.FILES.get('arquivo')
@@ -1933,10 +1860,10 @@ def meus_atestados_view(request):
             
             if tipo == 'DIAS':
                 atestado.qtd_dias = int(request.POST.get('qtd_dias'))
-            else: # HORAS
+            else: 
                 atestado.hora_inicio = request.POST.get('hora_inicio')
                 atestado.hora_fim = request.POST.get('hora_fim')
-                atestado.qtd_dias = 0 # Zera dias para não dar erro
+                atestado.qtd_dias = 0 
             
             atestado.save()
             messages.success(request, "Documento enviado com sucesso! Aguarde análise do RH.")
@@ -1946,21 +1873,17 @@ def meus_atestados_view(request):
             
         return redirect('meus_atestados')
 
-    # Histórico
     lista = Atestado.objects.filter(funcionario=funcionario).order_by('-data_envio')
     return render(request, 'core_rh/meus_atestados.html', {'lista': lista, 'funcionario': funcionario})
 
-
-# --- VIEW DO RH (LISTAGEM E AÇÃO) ---
 @login_required
 def rh_gestao_atestados(request):
     if not usuario_eh_rh(request.user):
         return HttpResponse("Acesso Negado", status=403)
         
-    # Processa Aprovação/Recusa
     if request.method == 'POST':
         atestado_id = request.POST.get('atestado_id')
-        acao = request.POST.get('acao') # 'aprovar' ou 'recusar'
+        acao = request.POST.get('acao')
         obs = request.POST.get('observacao_rh')
         
         atestado = get_object_or_404(Atestado, id=atestado_id)
@@ -1978,7 +1901,6 @@ def rh_gestao_atestados(request):
             
         return redirect('rh_gestao_atestados')
 
-    # Filtros simples
     status_filter = request.GET.get('status', 'Pendente')
     lista = Atestado.objects.all().order_by('-data_envio')
     
@@ -1989,15 +1911,14 @@ def rh_gestao_atestados(request):
         'lista': lista,
         'status_atual': status_filter
     })
+
 @login_required
 def admin_atestados_partial_view(request):
-    """Renderiza a lista de atestados dentro da aba do Admin"""
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
         return HttpResponse("Acesso Negado", status=403)
 
-    # Filtros
     q = request.GET.get('q', '').strip()
-    status_filtro = request.GET.get('status', 'Pendente') # Padrão: Pendente
+    status_filtro = request.GET.get('status', 'Pendente')
 
     lista = Atestado.objects.all().select_related('funcionario').order_by('-data_envio')
 
@@ -2012,12 +1933,10 @@ def admin_atestados_partial_view(request):
         'status_atual': status_filtro,
         'q': q
     }
-    # Renderiza apenas o pedaço HTML (include)
     return render(request, 'core_rh/includes/rh_atestados_moderno.html', context)
 
 @login_required
 def rh_acao_atestado(request):
-    """Processa a aprovação ou recusa vinda do Modal"""
     if not (request.user.is_staff or usuario_eh_rh(request.user)):
         return redirect('home')
         
@@ -2039,5 +1958,755 @@ def rh_acao_atestado(request):
             
         atestado.save()
         
-    # Redireciona para a mesma página (mantendo o usuário no Admin)
     return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+
+# --- SUBSTITUA AS FUNÇÕES: extrair_km_selenium E registro_km_view NO core_rh/views.py ---
+
+def extrair_km_selenium(url):
+    """
+    Abre Edge, extrai KM e também os NOMES da Origem/Destino baseados na URL final expandida.
+    Retorna: (distancia_float, nome_origem, nome_destino, mensagem_erro)
+    """
+    from selenium import webdriver
+    from selenium.webdriver.edge.service import Service as EdgeService
+    from selenium.webdriver.edge.options import Options as EdgeOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from webdriver_manager.microsoft import EdgeChromiumDriverManager
+    import re
+    from urllib.parse import unquote # Importante para limpar os nomes
+    
+    edge_options = EdgeOptions()
+    edge_options.add_argument("--headless")
+    edge_options.add_argument("--no-sandbox")
+    edge_options.add_argument("--disable-dev-shm-usage")
+    edge_options.add_argument("--disable-gpu")
+    edge_options.add_argument("--remote-debugging-port=9222")
+    edge_options.add_argument("--lang=pt-BR")
+    edge_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0")
+
+    driver = None
+    origem_detectada = "Origem Desconhecida"
+    destino_detectado = "Destino Desconhecido"
+
+    try:
+        print("--- INICIANDO SELENIUM EDGE ---")
+        try:
+            service = EdgeService(EdgeChromiumDriverManager().install())
+        except:
+            service = EdgeService()
+
+        driver = webdriver.Edge(service=service, options=edge_options)
+        
+        if "?" in url: url += "&units=metric"
+        else: url += "?units=metric"
+
+        driver.get(url)
+
+        # Espera carregar
+        wait = WebDriverWait(driver, 12)
+        try:
+            wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), ' km')]")))
+        except: pass
+
+        # --- NOVA LÓGICA DE NOMES: Extrair da URL Final ---
+        # Quando você usa link curto, o Google redireciona. 
+        # A URL final fica: .../maps/dir/Origem+Completa/Destino+Completo/...
+        url_final = driver.current_url
+        print(f"--- URL FINAL RESOLVIDA: {url_final} ---")
+
+        if "/dir/" in url_final:
+            try:
+                # Pega o que vem depois de /dir/
+                trecho_rota = url_final.split("/dir/")[1]
+                # Geralmente separado por /
+                partes = trecho_rota.split("/")
+                
+                if len(partes) >= 2:
+                    # Limpeza: unquote troca %20 por espaço, replace troca + por espaço
+                    raw_origem = unquote(partes[0]).replace('+', ' ')
+                    raw_destino = unquote(partes[1]).replace('+', ' ')
+                    
+                    # Remove coordenadas se vierem grudadas (ex: Rua A/@-23.444...)
+                    origem_detectada = raw_origem.split('/@')[0].split('!')[0]
+                    destino_detectado = raw_destino.split('/@')[0].split('!')[0]
+            except Exception as e_url:
+                print(f"Erro ao ler nomes da URL: {e_url}")
+
+        # --- LÓGICA DE KM (MANTIDA) ---
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            page_source = driver.page_source
+            tudo = body_text + " " + page_source
+        except:
+            tudo = driver.page_source
+
+        distancias_validas = []
+        regex_km = r'(\d+[,.]\d+)\s*km'
+        matches = re.findall(regex_km, tudo)
+        
+        for m in matches:
+            try:
+                valor = float(m.replace(',', '.'))
+                if 0.5 <= valor < 20000:
+                    distancias_validas.append(valor)
+            except: pass
+
+        if not distancias_validas:
+            return 0.0, origem_detectada, destino_detectado, "Nenhuma distância encontrada."
+
+        max_rota = max(distancias_validas)
+        limite_ruido = max_rota * 0.05 
+        if limite_ruido < 1.0: limite_ruido = 0.5 
+
+        rotas_finais = [d for d in distancias_validas if d > limite_ruido]
+        if not rotas_finais: rotas_finais = distancias_validas
+
+        menor_km = min(rotas_finais)
+        
+        return menor_km, origem_detectada, destino_detectado, "Sucesso"
+
+    except Exception as e:
+        return 0.0, origem_detectada, destino_detectado, f"Erro técnico: {str(e)}"
+    finally:
+        if driver:
+            try: driver.quit()
+            except: pass
+
+@login_required
+def excluir_despesa(request, despesa_id):
+    despesa = get_object_or_404(DespesaDiversa, id=despesa_id)
+    
+    # Segurança opcional: verificar se a despesa pertence ao usuário logado
+    # if despesa.funcionario.usuario != request.user:
+    #     return HttpResponseForbidden()
+
+    despesa.delete()
+    messages.success(request, "Despesa excluída com sucesso.")
+    
+    # Redireciona de volta para a tela do técnico (ajuste o nome da url se for diferente)
+    return redirect('registro_km')
+
+    # --- FUNÇÃO AUXILIAR (Coloque no views.py, fora das views) ---
+
+# --- FUNÇÃO GERADORA DE EXCEL (ATUALIZADA PARA LINK MANUAL) ---
+def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
+    """Gera o objeto Workbook com os dados de KM/Despesas do funcionário."""
+    
+    try:
+        from pdf2image import convert_from_path
+        HAS_PDF_CONVERTER = True
+    except ImportError:
+        HAS_PDF_CONVERTER = False
+
+    def style_range(ws, cell_range, border=None, fill=None, font=None, alignment=None):
+        selection = ws[cell_range]
+        if not isinstance(selection, tuple): selection = ((selection,),)
+        elif isinstance(selection, tuple) and not isinstance(selection[0], tuple): selection = (selection,)
+        for row in selection:
+            for cell in row:
+                if border: cell.border = border
+                if fill: cell.fill = fill
+                if font: cell.font = font
+                if alignment: cell.alignment = alignment
+
+    # Busca Dados
+    lista_itens = []
+    val_km = float(funcionario.valor_km) if funcionario.valor_km else 0.0
+
+    # KMs
+    kms = ControleKM.objects.filter(funcionario=funcionario, data__range=[dt_inicio, dt_fim]).order_by('data')
+    for k in kms:
+        trechos = k.trechos.all()
+        if trechos.exists():
+            for t in trechos:
+                # MUDANÇA AQUI: Usamos o link salvo no campo 'origem' (se for um link válido)
+                link = t.origem if t.origem and 'http' in t.origem else None
+                
+                origem_final = t.nome_origem if t.nome_origem else "Origem"
+                destino_final = t.nome_destino if t.nome_destino else "Destino"
+                
+                lista_itens.append({
+                    'data': k.data, 'chamado': k.numero_chamado, 'tipo': 'DESLOCAMENTO',
+                    'origem': origem_final, 'destino': destino_final, 'km': float(t.km),
+                    'valor': float(t.km) * val_km, 'obs': '', 'link': link,
+                    'is_img': False, 'is_pdf': False, 'is_km': True, 'path': None
+                })
+        else:
+            lista_itens.append({
+                'data': k.data, 'chamado': k.numero_chamado, 'tipo': 'DESLOCAMENTO',
+                'origem': 'Registro Manual', 'destino': '-', 'km': float(k.total_km),
+                'valor': float(k.total_km) * val_km, 'obs': 'Sem rota', 'link': None,
+                'is_img': False, 'is_pdf': False, 'is_km': True, 'path': None
+            })
+
+    # Despesas (Mantido igual)
+    despesas = DespesaDiversa.objects.filter(funcionario=funcionario, data__range=[dt_inicio, dt_fim]).order_by('data')
+    for d in despesas:
+        path_disk = None; url_web = None; is_pdf = False
+        if d.comprovante:
+            try: url_web = d.comprovante.url 
+            except: pass
+            try: path_disk = d.comprovante.path
+            except:
+                try: path_disk = os.path.join(settings.MEDIA_ROOT, d.comprovante.name)
+                except: pass
+            if path_disk and path_disk.lower().endswith('.pdf'): is_pdf = True
+            
+        lista_itens.append({
+            'data': d.data, 'chamado': d.numero_chamado, 'tipo': d.tipo.upper(),
+            'origem': '-', 'destino': '-', 'km': 0.0,
+            'valor': float(d.valor or 0), 'obs': d.especificacao or '',
+            'link': url_web, 
+            'is_img': (path_disk is not None), 'is_pdf': is_pdf, 'is_km': False, 'path': path_disk
+        })
+    lista_itens.sort(key=lambda x: x['data'])
+
+    # Excel Visual (Layout e Imagens)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Relatório"
+    ws.sheet_view.showGridLines = False
+
+    BLUE_DARK = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    BLUE_LIGHT = PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid")
+    WHITE_FONT = Font(name='Arial', size=14, bold=True, color="FFFFFF")
+    BOLD_FONT = Font(name='Arial', size=10, bold=True)
+    NORMAL_FONT = Font(name='Arial', size=10)
+    BORDER_ALL = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    CENTER = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    LEFT = Alignment(horizontal='left', vertical='center', wrap_text=True)
+
+    ws.column_dimensions['A'].width = 18; ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 20; ws.column_dimensions['D'].width = 30
+    ws.column_dimensions['E'].width = 30; ws.column_dimensions['F'].width = 10
+    ws.column_dimensions['G'].width = 15; ws.column_dimensions['H'].width = 25
+
+    # Cabeçalho
+    ws.merge_cells('A1:F2'); ws['A1'] = "PLANILHA DE DESPESA"
+    style_range(ws, 'A1:F2', border=BORDER_ALL, fill=BLUE_DARK, font=WHITE_FONT, alignment=CENTER)
+    ws.merge_cells('G1:G2'); ws['G1'] = "SEMANA"
+    style_range(ws, 'G1:G2', border=BORDER_ALL, fill=BLUE_LIGHT, font=BOLD_FONT, alignment=CENTER)
+    ws.merge_cells('H1:H2'); ws['H1'] = f"{dt_inicio.isocalendar()[1]}/{dt_inicio.year}"
+    style_range(ws, 'H1:H2', border=BORDER_ALL, font=BOLD_FONT, alignment=CENTER)
+
+    labels = [
+        (3, 'FUNCIONÁRIO:', funcionario.nome_completo.upper()),
+        (4, 'RESIDÊNCIA:', f"{funcionario.endereco} - {funcionario.bairro}"),
+        (5, 'TRANSPORTE:', funcionario.tipo_veiculo.upper() if funcionario.tipo_veiculo else "PARTICULAR"),
+        (6, 'PERÍODO:', f"DE {dt_inicio.strftime('%d/%m/%Y')} A {dt_fim.strftime('%d/%m/%Y')}")
+    ]
+    for r, lbl, val in labels:
+        ws.cell(row=r, column=1, value=lbl); ws.cell(row=r, column=3, value=val)
+        ws.merge_cells(f'A{r}:B{r}'); ws.merge_cells(f'C{r}:F{r}')
+        style_range(ws, f'A{r}:B{r}', border=BORDER_ALL, font=BOLD_FONT, alignment=LEFT)
+        style_range(ws, f'C{r}:F{r}', border=BORDER_ALL, font=NORMAL_FONT, alignment=LEFT)
+
+    banco_data = [('BANCO', funcionario.banco), ('AGÊNCIA', funcionario.agencia), ('CONTA', funcionario.conta), ('PIX', funcionario.chave_pix)]
+    curr_row = 3
+    for k, v in banco_data:
+        ws.cell(row=curr_row, column=7, value=k); ws.cell(row=curr_row, column=8, value=v or '-')
+        style_range(ws, f'G{curr_row}', border=BORDER_ALL, fill=BLUE_LIGHT, font=BOLD_FONT, alignment=CENTER)
+        style_range(ws, f'H{curr_row}', border=BORDER_ALL, font=NORMAL_FONT, alignment=CENTER)
+        curr_row += 1
+
+    headers_table = ["Data", "Chamado", "Tipo", "Origem / Descrição", "Destino", "KM", "Valor", "Obs / Link"]
+    for i, h in enumerate(headers_table, 1):
+        ws.cell(row=7, column=i, value=h)
+        ws.merge_cells(start_row=7, start_column=i, end_row=8, end_column=i)
+        col_letter = get_column_letter(i)
+        style_range(ws, f"{col_letter}7:{col_letter}8", border=BORDER_ALL, fill=BLUE_DARK, font=Font(name='Arial', size=11, bold=True, color="FFFFFF"), alignment=CENTER)
+
+    current_row = 9; total_val = 0.0
+    wb.create_sheet("Comprovantes"); ws_gal = wb["Comprovantes"]; ws_gal.column_dimensions['A'].width = 80; row_gal = 1
+
+    for item in lista_itens:
+        vals = [item['data'].strftime('%d/%m/%Y'), item['chamado'], item['tipo'], item['obs'] if (item['is_img'] or item['is_pdf']) else item['origem'], item['destino'], item['km'] if item['km'] > 0 else "-", item['valor']]
+        for col, val in enumerate(vals, 1):
+            cell = ws.cell(row=current_row, column=col, value=val)
+            cell.border = BORDER_ALL; cell.font = NORMAL_FONT
+            cell.alignment = LEFT if col in [4, 5] else CENTER
+            if col == 7: cell.number_format = 'R$ #,##0.00'
+
+        cell_link = ws.cell(row=current_row, column=8); cell_link.border = BORDER_ALL; cell_link.alignment = CENTER
+        if item['link']:
+            txt = "Abrir PDF (Web)" if item['is_pdf'] else ("Abrir Mapa" if item['is_km'] else "Abrir Anexo")
+            cell_link.value = txt; cell_link.hyperlink = item['link']; cell_link.font = Font(color="0000FF", underline="single")
+        elif item['is_img']:
+            cell_link.value = "Ver Aba Comprovantes"; cell_link.font = Font(color="FF0000", italic=True)
+
+        if item['path'] and os.path.exists(item['path']):
+            ws_gal.cell(row=row_gal, column=1, value=f"REF: {item['data'].strftime('%d/%m')} - R$ {item['valor']} ({item['tipo']})").font = BOLD_FONT
+            row_gal += 1
+            img_to_insert = None
+            try:
+                if item['is_pdf'] and HAS_PDF_CONVERTER:
+                    images = convert_from_path(item['path'], first_page=1, last_page=1)
+                    if images:
+                        temp_pdf_img = os.path.join(settings.MEDIA_ROOT, f"temp_pdf_{item['data'].strftime('%d%m%H%M%S')}_{row_gal}.jpg")
+                        images[0].save(temp_pdf_img, 'JPEG')
+                        img_to_insert = ExcelImage(temp_pdf_img)
+                elif not item['is_pdf']:
+                    img_to_insert = ExcelImage(item['path'])
+
+                if img_to_insert:
+                    base_height = 400; ratio = img_to_insert.width / img_to_insert.height
+                    img_to_insert.height = base_height; img_to_insert.width = base_height * ratio
+                    ws_gal.add_image(img_to_insert, f'A{row_gal}'); row_gal += 21
+                else:
+                    ws_gal.cell(row=row_gal, column=1, value="[Conversão indisponível]").font = Font(italic=True); row_gal += 2
+            except Exception as e:
+                print(f"Erro imagem: {e}"); ws_gal.cell(row=row_gal, column=1, value="[Erro Imagem]").font = Font(color="FF0000"); row_gal += 2
+
+        total_val += item['valor']; current_row += 1
+
+    ws.cell(row=current_row, column=6, value="TOTAL"); ws.cell(row=current_row, column=7, value=total_val)
+    style_range(ws, f'F{current_row}:G{current_row}', border=BORDER_ALL, fill=BLUE_LIGHT, font=BOLD_FONT, alignment=CENTER)
+    ws.cell(row=current_row, column=7).number_format = 'R$ #,##0.00'
+    return wb
+# ==============================================================================
+# BLOCO KM / DESPESAS / LOTE (Colar no lugar das funções antigas)
+# ==============================================================================
+
+# --- DOWNLOAD EM LOTE (NOVO) ---
+@login_required
+def baixar_lote_km(request, equipe_id, ano, mes, semana):
+    try:
+        semana_idx = int(semana) - 1
+        cal = monthcalendar(int(ano), int(mes))
+        semanas_validas = [s for s in cal if any(d != 0 for d in s)]
+        # Proteção de índice
+        if semana_idx < 0: semana_idx = 0
+        if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+        
+        semana_lista = semanas_validas[semana_idx]
+        dia_referencia = next(d for d in semana_lista if d != 0)
+        data_ref = date(int(ano), int(mes), dia_referencia)
+        dt_inicio = data_ref - timedelta(days=data_ref.weekday())
+        dt_fim = dt_inicio + timedelta(days=6)
+    except:
+        messages.error(request, "Erro ao calcular datas do lote.")
+        return redirect('area_gestor')
+
+    equipe = get_object_or_404(Equipe, id=equipe_id)
+    # Pega funcionários da equipe (Principal ou Secundária)
+    funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
+
+    zip_buffer = io.BytesIO()
+    count = 0
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for func in funcionarios:
+            # Verifica se tem lançamentos nessa semana
+            tem_km = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
+            tem_despesa = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
+            
+            if tem_km or tem_despesa:
+                # Gera o Excel individual usando a função auxiliar
+                wb = gerar_workbook_km(func, dt_inicio, dt_fim)
+                
+                excel_buffer = io.BytesIO()
+                wb.save(excel_buffer)
+                
+                # Nome do arquivo dentro do ZIP
+                nome_arq = f"{func.nome_completo.split()[0]}_S{semana}.xlsx"
+                zip_file.writestr(nome_arq, excel_buffer.getvalue())
+                count += 1
+    
+    if count == 0:
+        messages.warning(request, "Nenhum relatório encontrado para esta semana.")
+        return redirect('area_gestor')
+
+    zip_buffer.seek(0)
+    response = HttpResponse(zip_buffer, content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="Lote_{equipe.nome}_S{semana}.zip"'
+    return response
+
+# --- APROVAÇÃO EM LOTE (NOVO) ---
+@login_required
+def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
+    try:
+        semana_idx = int(semana) - 1
+        cal = monthcalendar(int(ano), int(mes))
+        semanas_validas = [s for s in cal if any(d != 0 for d in s)]
+        if semana_idx < 0: semana_idx = 0
+        if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+        
+        semana_lista = semanas_validas[semana_idx]
+        dia_referencia = next(d for d in semana_lista if d != 0)
+        data_ref = date(int(ano), int(mes), dia_referencia)
+        dt_inicio = data_ref - timedelta(days=data_ref.weekday())
+        dt_fim = dt_inicio + timedelta(days=6)
+    except:
+        messages.error(request, "Data inválida para aprovação.")
+        return redirect('area_gestor')
+
+    equipe = get_object_or_404(Equipe, id=equipe_id)
+    funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
+
+    # Aprova KMs Pendentes
+    kms = ControleKM.objects.filter(
+        funcionario__in=funcionarios,
+        data__range=[dt_inicio, dt_fim],
+        status='Pendente'
+    )
+    qtd_kms = kms.update(status='Aprovado')
+    
+    # Aprova Despesas Pendentes
+    despesas = DespesaDiversa.objects.filter(
+        funcionario__in=funcionarios,
+        data__range=[dt_inicio, dt_fim],
+        status='Pendente'
+    )
+    qtd_desp = despesas.update(status='Aprovado')
+    
+    if qtd_kms > 0 or qtd_desp > 0:
+        messages.success(request, f"Lote Aprovado: {qtd_kms} roteiros e {qtd_desp} despesas atualizados!")
+    else:
+        messages.info(request, "Nenhum item pendente para aprovar nesta semana.")
+        
+    return redirect('area_gestor')
+
+# --- VIEWS DE REGISTRO E GESTÃO INDIVIDUAL (ATUALIZADAS) ---
+
+# --- REGISTRO KM E DOWNLOAD INDIVIDUAL (SEM SELENIUM - 100% MANUAL) ---
+@login_required
+def registro_km_view(request):
+    if not usuario_eh_campo(request.user): return redirect('home')
+    funcionario = request.user.funcionario
+
+    if request.method == 'POST':
+        google_url = request.POST.get('google_url')
+        data_str = request.POST.get('data_viagem')
+        chamado = request.POST.get('numero_chamado')
+        nome_origem_input = request.POST.get('nome_origem')
+        nome_destino_input = request.POST.get('nome_destino')
+        km_manual_str = request.POST.get('km_manual') # Novo campo
+
+        data_final = timezone.now().date()
+        if data_str:
+            try: data_final = datetime.strptime(data_str, '%Y-%m-%d').date()
+            except: pass
+        
+        # Processa KM Manual (Substitui vírgula por ponto)
+        km_final = 0.0
+        if km_manual_str:
+            try: km_final = float(km_manual_str.replace(',', '.'))
+            except: km_final = 0.0
+
+        if km_final > 0:
+            try:
+                # Cria Controle Principal
+                controle = ControleKM.objects.create(
+                    funcionario=funcionario, data=data_final, total_km=km_final, 
+                    numero_chamado=chamado, status='Pendente'
+                )
+                
+                # Cria Trecho
+                # OBS: Salvamos o 'google_url' no campo 'origem' do modelo TrechoKM
+                # para que ele possa ser recuperado e colocado como link no Excel depois.
+                TrechoKM.objects.create(
+                    controle=controle, 
+                    origem=google_url if google_url else "-", # Salva o LINK aqui
+                    destino='-', 
+                    km=km_final,
+                    nome_origem=nome_origem_input, 
+                    nome_destino=nome_destino_input
+                )
+                messages.success(request, f"Rota de {km_final} km registrada com sucesso!")
+            except Exception as e:
+                messages.error(request, f"Erro ao salvar: {e}")
+        else:
+            messages.error(request, "Informe a quilometragem válida (maior que 0).")
+            
+        return redirect('registro_km')
+    
+    # Histórico (Mantido Igual)
+    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:20]
+    despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:20]
+    
+    historico = []
+    for k in kms:
+        historico.append({'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 'valor': None, 'status': k.status})
+    for d in despesas:
+        historico.append({'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 'status': d.status, 'comprovante': d.comprovante})
+    
+    historico.sort(key=lambda x: x['data'], reverse=True)
+    return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
+    if not usuario_eh_campo(request.user):
+        return redirect('home')
+    
+    funcionario = request.user.funcionario
+
+    if request.method == 'POST':
+        google_url = request.POST.get('google_url')
+        data_str = request.POST.get('data_viagem')
+        chamado = request.POST.get('numero_chamado')
+        # Novos campos manuais
+        nome_origem_input = request.POST.get('nome_origem')
+        nome_destino_input = request.POST.get('nome_destino')
+        
+        data_final = timezone.now().date()
+        if data_str:
+            try: data_final = datetime.strptime(data_str, '%Y-%m-%d').date()
+            except: pass
+        
+        if google_url:
+            # Chama a função do Selenium (certifique-se que ela existe no arquivo)
+            distancia, orig_nome, dest_nome, msg = extrair_km_selenium(google_url)
+            
+            if distancia > 0:
+                try:
+                    controle = ControleKM.objects.create(
+                        funcionario=funcionario,
+                        data=data_final,
+                        total_km=distancia,
+                        numero_chamado=chamado,
+                        status='Pendente'
+                    )
+                    
+                    TrechoKM.objects.create(
+                        controle=controle,
+                        origem=orig_nome[:150], # Guarda o do Google para backup
+                        destino=dest_nome[:150],
+                        km=distancia,
+                        # Salva o que o técnico digitou
+                        nome_origem=nome_origem_input,
+                        nome_destino=nome_destino_input
+                    )
+                    messages.success(request, f"Sucesso! Rota de {distancia} km registrada.")
+                except Exception as e:
+                    messages.error(request, f"Erro ao salvar no banco: {e}")
+            else:
+                messages.error(request, f"Falha na leitura: {msg}.")
+            
+            return redirect('registro_km')
+    
+    # Histórico Unificado
+    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:20]
+    despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:20]
+    
+    historico = []
+    for k in kms:
+        historico.append({
+            'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 
+            'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 
+            'valor': None, 'status': k.status
+        })
+    for d in despesas:
+        historico.append({
+            'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 
+            'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 
+            'status': d.status, 'comprovante': d.comprovante,
+            'especificacao': d.especificacao
+        })
+    
+    historico.sort(key=lambda x: x['data'], reverse=True)
+    return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
+
+@login_required
+def baixar_relatorio_excel(request, func_id=None):
+    # Essa view agora é apenas uma "casca" que chama a função geradora
+    if func_id and (request.user.is_staff or usuario_eh_rh(request.user)):
+        funcionario = get_object_or_404(Funcionario, id=func_id)
+    else:
+        try: funcionario = request.user.funcionario
+        except: return HttpResponse("Erro.", status=400)
+
+    hoje = timezone.now().date()
+    try:
+        ano = int(request.GET.get('ano', hoje.year))
+        mes = int(request.GET.get('mes', hoje.month))
+        semana_param = request.GET.get('semana')
+    except: ano, mes, semana_param = hoje.year, hoje.month, None
+
+    if semana_param:
+        try:
+            semana_idx = int(semana_param) - 1
+            cal = monthcalendar(ano, mes)
+            semanas_validas = [s for s in cal if any(d != 0 for d in s)]
+            if semana_idx < 0: semana_idx = 0
+            if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+            
+            semana_lista = semanas_validas[semana_idx]
+            dia_referencia = next(d for d in semana_lista if d != 0)
+            data_ref = date(ano, mes, dia_referencia)
+            
+            dt_inicio = data_ref - timedelta(days=data_ref.weekday())
+            dt_fim = dt_inicio + timedelta(days=6)
+        except: dt_inicio = date(ano, mes, 1); dt_fim = date(ano, mes, monthrange(ano, mes)[1])
+    else:
+        dt_inicio = date(ano, mes, 1); dt_fim = date(ano, mes, monthrange(ano, mes)[1])
+
+    # CHAMA A FUNÇÃO AUXILIAR
+    wb = gerar_workbook_km(funcionario, dt_inicio, dt_fim)
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    nome_arq = f"Relatorio_S{dt_inicio.strftime('%W')}_{dt_inicio.strftime('%d%m')}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{nome_arq}"'
+    wb.save(response)
+    return response
+
+@login_required
+def aprovar_km_gestor(request, controle_id):
+    km = get_object_or_404(ControleKM, id=controle_id)
+    km.status = 'Aprovado'
+    km.save()
+    
+    # Sincroniza a semana inteira
+    dt = km.data
+    ini = dt - timedelta(days=dt.weekday())
+    fim = ini + timedelta(days=6)
+    
+    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Aprovado')
+    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Aprovado')
+    
+    messages.success(request, f"Semana de {ini.strftime('%d/%m')} aprovada (KMs e Despesas).")
+    return redirect('area_gestor')
+
+@login_required
+def marcar_km_pago(request, controle_id):
+    km = get_object_or_404(ControleKM, id=controle_id)
+    km.status = 'Pago'
+    km.save()
+    
+    dt = km.data
+    ini = dt - timedelta(days=dt.weekday())
+    fim = ini + timedelta(days=6)
+    
+    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Pago')
+    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Pago')
+    
+    messages.success(request, "Semana marcada como Paga.")
+    return redirect('area_gestor')
+
+@login_required
+def excluir_km(request, km_id):
+    c = get_object_or_404(ControleKM, id=km_id)
+    if c.funcionario.usuario == request.user or request.user.is_superuser:
+        c.delete()
+        messages.success(request, "Removido")
+    return redirect('registro_km')
+
+@login_required
+def excluir_despesa(request, despesa_id):
+    d = get_object_or_404(DespesaDiversa, id=despesa_id)
+    if d.funcionario.usuario == request.user or request.user.is_superuser:
+        d.delete()
+        messages.success(request, "Despesa Removida")
+    return redirect('registro_km')
+
+@login_required
+def salvar_despesa_diversa_view(request):
+    if request.method != 'POST': return redirect('registro_km')
+    try: funcionario = request.user.funcionario
+    except: return redirect('registro_km')
+
+    try:
+        data = request.POST.get('data_despesa')
+        chamado = request.POST.get('numero_chamado')
+        tipo = request.POST.get('tipo_despesa')
+        espec = request.POST.get('especificacao')
+        valor_str = request.POST.get('valor')
+        arquivo = request.FILES.get('comprovante')
+
+        if not arquivo:
+            messages.error(request, "Anexo obrigatório.")
+            return redirect('registro_km')
+
+        valor_final = 0.00
+        if valor_str:
+            limpo = valor_str.replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+            try: valor_final = float(limpo)
+            except: valor_final = 0.00
+
+        DespesaDiversa.objects.create(
+            funcionario=funcionario, data=data, numero_chamado=chamado,
+            tipo=tipo, especificacao=espec, valor=valor_final,
+            comprovante=arquivo, status='Pendente'
+        )
+        messages.success(request, f"Despesa de R$ {valor_final:.2f} lançada!")
+    except Exception as e:
+        messages.error(request, f"Erro: {e}")
+
+    return redirect('registro_km')
+
+@login_required
+def atualizar_dados_tecnico(request):
+    if request.method == 'POST':
+        try:
+            try: func = request.user.funcionario
+            except: return redirect('registro_km')
+            
+            func.cep = request.POST.get('cep')
+            func.endereco = request.POST.get('endereco')
+            func.bairro = request.POST.get('bairro')
+            func.cidade = request.POST.get('cidade')
+            func.estado = request.POST.get('estado')
+            func.base = request.POST.get('base')
+            func.tipo_veiculo = request.POST.get('tipo_veiculo')
+            
+            val_km = request.POST.get('valor_km', '0')
+            if val_km:
+                val_limpo = val_km.replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+                try: func.valor_km = float(val_limpo)
+                except: pass
+            
+            func.banco = request.POST.get('banco')
+            func.agencia = request.POST.get('agencia')
+            func.operacao = request.POST.get('operacao')
+            func.conta = request.POST.get('conta')
+            
+            func.save()
+            messages.success(request, "Dados atualizados!")
+        except Exception as e:
+            messages.error(request, f"Erro: {e}")
+            
+    return redirect('registro_km')
+# Adicione isso no final ou junto com as funções de KM
+@login_required
+def repetir_rota_view(request):
+    if request.method == 'POST':
+        try:
+            km_id = request.POST.get('km_id')
+            nova_data = request.POST.get('nova_data')
+            novo_chamado = request.POST.get('novo_chamado')
+
+            # Busca o original
+            original_controle = get_object_or_404(ControleKM, id=km_id)
+            
+            # Verifica permissão (só o próprio dono pode repetir)
+            if original_controle.funcionario.usuario != request.user:
+                messages.error(request, "Permissão negada.")
+                return redirect('registro_km')
+
+            # Cria o Novo Controle (Cópia do Pai)
+            novo_controle = ControleKM.objects.create(
+                funcionario=request.user.funcionario,
+                data=nova_data,
+                numero_chamado=novo_chamado,
+                total_km=original_controle.total_km,
+                status='Pendente'
+            )
+
+            # Cria o Novo Trecho (Cópia dos Filhos)
+            # Geralmente é 1 trecho, mas se tiver mais, copiamos o primeiro que contém os dados principais
+            trecho_original = original_controle.trechos.first()
+            
+            if trecho_original:
+                TrechoKM.objects.create(
+                    controle=novo_controle,
+                    origem=trecho_original.origem, # Aqui está o Link
+                    destino=trecho_original.destino,
+                    km=trecho_original.km,
+                    nome_origem=trecho_original.nome_origem,
+                    nome_destino=trecho_original.nome_destino
+                )
+
+            messages.success(request, "Rota repetida com sucesso!")
+
+        except Exception as e:
+            messages.error(request, f"Erro ao repetir rota: {e}")
+
+    return redirect('registro_km')

@@ -4,92 +4,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Equipe | Portal RH</title>
+    <title>Área do Gestor | Portal RH</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            background-color: #f4f6f9;
-            font-family: 'Inter', sans-serif;
-            color: #333;
-        }
+        body { background-color: #f4f6f9; font-family: 'Inter', sans-serif; color: #333; }
 
-        /* --- Estilos Gerais --- */
-        .card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
+        /* --- Cards e Estrutura --- */
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); transition: transform 0.2s ease, box-shadow 0.2s ease; }
         
         .btn-nav-month {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #e2e8f0;
-            background: #fff;
-            color: #64748b;
-            transition: all 0.2s;
-            text-decoration: none;
+            width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            border: 1px solid #e2e8f0; background: #fff; color: #64748b; transition: all 0.2s; text-decoration: none;
         }
-        .btn-nav-month:hover {
-            background: #f8fafc;
-            color: #3b82f6;
-            border-color: #cbd5e1;
-        }
+        .btn-nav-month:hover { background: #f8fafc; color: #3b82f6; border-color: #cbd5e1; }
 
-        /* --- Tabela Moderna --- */
+        /* --- Tabelas --- */
+        .table-custom { border-collapse: separate; border-spacing: 0; width: 100%; }
         .table-custom thead th {
-            background-color: #f8fafc;
-            color: #64748b;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.5px;
-            padding: 15px 20px;
-            border-bottom: 2px solid #e2e8f0;
+            background-color: #f8fafc; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 0.75rem;
+            letter-spacing: 0.5px; padding: 15px 20px; border-bottom: 2px solid #e2e8f0;
         }
-        
-        .table-custom tbody td {
-            padding: 15px 20px;
-            vertical-align: middle;
-            border-bottom: 1px solid #f1f5f9;
-            background: #fff;
-        }
-        
-        .table-hover tbody tr:hover td {
-            background-color: #f8fbff;
-        }
+        .table-custom tbody td { padding: 15px 20px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; background: #fff; }
+        .table-hover tbody tr:hover td { background-color: #f8fbff; }
 
         /* --- Badges --- */
         .badge-soft-success { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
         .badge-soft-warning { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
         .badge-soft-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+        .badge-soft-info { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
         .badge-soft-secondary { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 
-        /* --- Avatar --- */
+        /* --- Avatars --- */
         .avatar-circle {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 14px;
-            color: #fff;
-            background: linear-gradient(135deg, #FF6600, #ff8533);
+            width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, #FF6600, #ff8533);
             box-shadow: 0 2px 5px rgba(255, 102, 0, 0.2);
         }
 
-        /* --- Modal --- */
+        /* --- Nav Pills --- */
+        .nav-pills .nav-link { color: #64748b; font-weight: 600; border-radius: 50px; padding: 10px 25px; transition: all 0.3s; }
+        .nav-pills .nav-link.active { background-color: #FF6600; color: #fff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3); }
+        .nav-pills .nav-link:hover:not(.active) { background-color: #e2e8f0; color: #333; }
+
+        /* Modal */
         .modal-content { border-radius: 16px; border: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .modal-header { border-bottom: 1px solid #f1f5f9; padding: 20px 25px; }
         .modal-body { padding: 25px; }
@@ -117,13 +78,13 @@
 
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 bg-white p-4 rounded-4 shadow-sm">
             <div>
-                <h4 class="fw-bold text-dark mb-1">Minha Equipe</h4>
-                <p class="text-muted small mb-0">Gerencie o ponto e assinaturas dos seus colaboradores.</p>
+                <h4 class="fw-bold text-dark mb-1">Área do Gestor</h4>
+                <p class="text-muted small mb-0">Gerencie ponto, assinaturas e reembolsos da sua equipe.</p>
             </div>
 
             <div class="bg-light p-1 rounded-pill border d-flex align-items-center">
                 {% if nav_anterior %}
-                    <a href="?mes={{ nav_anterior.mes }}&ano={{ nav_anterior.ano }}" class="btn-nav-month" title="Mês Anterior">
+                    <a href="?mes={{ nav_anterior.mes }}&ano={{ nav_anterior.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month" title="Mês Anterior">
                         <i class="fas fa-chevron-left"></i>
                     </a>
                 {% else %}
@@ -131,11 +92,11 @@
                 {% endif %}
 
                 <div class="px-4 fw-bold text-dark d-flex align-items-center" style="min-width: 160px; justify-content: center;">
-    <i class="far fa-calendar-alt me-2 text-primary"></i> {{ nome_mes }}
-</div>
+                    <i class="far fa-calendar-alt me-2 text-primary"></i> {{ nome_mes }}
+                </div>
 
                 {% if nav_proximo %}
-                    <a href="?mes={{ nav_proximo.mes }}&ano={{ nav_proximo.ano }}" class="btn-nav-month" title="Próximo Mês">
+                    <a href="?mes={{ nav_proximo.mes }}&ano={{ nav_proximo.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month" title="Próximo Mês">
                         <i class="fas fa-chevron-right"></i>
                     </a>
                 {% else %}
@@ -153,120 +114,286 @@
             {% endfor %}
         {% endif %}
 
-        <div class="card overflow-hidden">
-            <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
-                <div class="position-relative" style="max-width: 400px; width: 100%;">
-                    <i class="fas fa-search text-muted position-absolute" style="left: 15px; top: 12px;"></i>
-                    <input type="text" id="searchTeam" class="form-control rounded-pill ps-5 border-0 shadow-sm" placeholder="Buscar funcionário..." onkeyup="filterTable()">
-                </div>
-                <div class="text-muted small fw-bold">
-                    Total: {{ lista_equipe|length }} Colaboradores
+        <ul class="nav nav-pills mb-4" id="gestorTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if not request.GET.tab or request.GET.tab == 'ponto' %}active{% endif %}" 
+                        id="ponto-tab" data-bs-toggle="tab" data-bs-target="#ponto-content" type="button" role="tab">
+                    <i class="fas fa-clock me-2"></i> Gestão de Ponto
+                </button>
+            </li>
+            
+            {% if equipes_km %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if request.GET.tab == 'km' %}active{% endif %}" 
+                        id="km-tab" data-bs-toggle="tab" data-bs-target="#km-content" type="button" role="tab">
+                    <i class="fas fa-road me-2"></i> Gestão de KM (Campo)
+                </button>
+            </li>
+            {% endif %}
+        </ul>
+
+        <div class="tab-content" id="gestorTabContent">
+            
+            <div class="tab-pane fade {% if not request.GET.tab or request.GET.tab == 'ponto' %}show active{% endif %}" id="ponto-content" role="tabpanel">
+                <div class="card overflow-hidden">
+                    <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                        <div class="position-relative" style="max-width: 400px; width: 100%;">
+                            <i class="fas fa-search text-muted position-absolute" style="left: 15px; top: 12px;"></i>
+                            <input type="text" id="searchTeam" class="form-control rounded-pill ps-5 border-0 shadow-sm" placeholder="Buscar funcionário..." onkeyup="filterTable('searchTeam', 'teamTable')">
+                        </div>
+                        <div class="text-muted small fw-bold">
+                            Total: {{ lista_ponto|length }} Colaboradores
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover mb-0" id="teamTable">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4" style="width: 35%;">Funcionário</th>
+                                    <th class="text-center" style="width: 20%;">Status Mês Atual</th>
+                                    <th class="text-center" style="width: 20%;">Ações do Gestor</th>
+                                    <th class="text-end pe-4" style="width: 25%;">Documentos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in lista_ponto %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-circle me-3">
+                                                {{ item.funcionario.nome_completo|slice:":2"|upper }}
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold text-dark">{{ item.funcionario.nome_completo }}</div>
+                                                <div class="small text-muted">{{ item.funcionario.cargo.titulo|default:"Colaborador" }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td class="text-center">
+                                        {% if item.status_gestor %}
+                                            <span class="badge rounded-pill badge-soft-success px-3 py-2">
+                                                <i class="fas fa-check-circle me-1"></i> Concluído
+                                            </span>
+                                        {% elif item.status_func %}
+                                            <span class="badge rounded-pill badge-soft-warning px-3 py-2">
+                                                <i class="fas fa-hourglass-half me-1"></i> Aguardando Você
+                                            </span>
+                                        {% else %}
+                                            <span class="badge rounded-pill badge-soft-danger px-3 py-2">
+                                                <i class="fas fa-user-clock me-1"></i> Pendente Func.
+                                            </span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="text-center">
+                                        {% if item.pode_assinar %}
+                                            <button type="button" 
+                                                onclick="abrirModalGestor(
+                                                    {{ item.funcionario.id }}, 
+                                                    '{{ item.funcionario.nome_completo }}', 
+                                                    {{ mes_atual }}, 
+                                                    {{ ano_atual }}, 
+                                                    '{{ item.arquivo_assinado_url|default:'None' }}'
+                                                )"
+                                                class="btn btn-warning btn-sm text-white fw-bold rounded-pill px-4 shadow-sm"
+                                                style="background-color: #ff9800; border: none;">
+                                                <i class="fas fa-pen-nib me-2"></i> Assinar Ponto
+                                            </button>
+                                        {% else %}
+                                            {% if item.status_gestor %}
+                                                <span class="text-success small fw-bold"><i class="fas fa-check-double"></i> Assinado</span>
+                                            {% else %}
+                                                <span class="text-muted small opacity-50"><i class="fas fa-ban"></i> Indisponível</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <a href="{% url 'gerar_pdf_ponto' %}?mes={{ mes_atual }}&ano={{ ano_atual }}&funcionario_id={{ item.funcionario.id }}" 
+                                               target="_blank"
+                                               class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold" 
+                                               title="Ver Espelho">
+                                                <i class="far fa-file-alt"></i>
+                                            </a>
+
+                                            {% if item.arquivo_assinado_url %}
+                                                <a href="{{ item.arquivo_assinado_url }}" 
+                                                   download="{{ item.nome_download }}"
+                                                   class="btn btn-sm btn-outline-success rounded-pill px-3 fw-bold"
+                                                   title="Baixar PDF">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            {% endif %}
+
+                                            <a href="{% url 'historico_funcionario' item.funcionario.id %}" 
+                                               class="btn btn-sm btn-light border rounded-circle text-muted" 
+                                               title="Histórico">
+                                                <i class="fas fa-history"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center py-5">
+                                        <div class="text-muted opacity-25 mb-3"><i class="fas fa-users-slash fa-3x"></i></div>
+                                        <h6 class="fw-bold text-secondary">Nenhum colaborador encontrado.</h6>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            <div class="table-responsive">
-                <table class="table table-custom table-hover mb-0" id="teamTable">
-                    <thead>
-                        <tr>
-                            <th class="ps-4">Funcionário</th>
-                            <th class="text-center">Status Mês Atual</th>
-                            <th class="text-center">Ações do Gestor</th>
-                            <th class="text-end pe-4">Documentos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in lista_equipe %}
-                        <tr>
-                            <td class="ps-4">
-                                <div class="d-flex align-items-center">
-                                    <div class="avatar-circle me-3">
-                                        {{ item.funcionario.nome_completo|slice:":2"|upper }}
-                                    </div>
-                                    <div>
-                                        <div class="fw-bold text-dark">{{ item.funcionario.nome_completo }}</div>
-                                        <div class="small text-muted">{{ item.funcionario.cargo.titulo|default:"Colaborador" }}</div>
-                                    </div>
-                                </div>
-                            </td>
+            {% if equipes_km %}
+            <div class="tab-pane fade {% if request.GET.tab == 'km' %}show active{% endif %}" id="km-content" role="tabpanel">
+                
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3 bg-white p-3 rounded-4 shadow-sm border">
+                    <div class="d-flex align-items-center">
+                        <span class="fw-bold me-2 text-secondary"><i class="fas fa-users me-1"></i> Equipe:</span>
+                        {% if equipes_km.count > 1 %}
+                            <div class="dropdown">
+                                <button class="btn btn-light border dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
+                                    {{ equipe_km_selecionada.nome }}
+                                </button>
+                                <ul class="dropdown-menu shadow border-0">
+                                    {% for eq in equipes_km %}
+                                    <li><a class="dropdown-item" href="?mes={{ mes_atual }}&ano={{ ano_atual }}&km_team={{ eq.id }}&tab=km&semana={{ semana_selecionada }}">{{ eq.nome }}</a></li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <span class="badge bg-secondary fs-6">{{ equipe_km_selecionada.nome }}</span>
+                        {% endif %}
+                    </div>
 
-                            <td class="text-center">
-                                {% if item.status_gestor %}
-                                    <span class="badge rounded-pill badge-soft-success px-3 py-2">
-                                        <i class="fas fa-check-circle me-1"></i> Concluído
-                                    </span>
-                                {% elif item.status_func %}
-                                    <span class="badge rounded-pill badge-soft-warning px-3 py-2">
-                                        <i class="fas fa-hourglass-half me-1"></i> Aguardando Você
-                                    </span>
-                                {% else %}
-                                    <span class="badge rounded-pill badge-soft-danger px-3 py-2">
-                                        <i class="fas fa-user-clock me-1"></i> Pendente Func.
-                                    </span>
-                                {% endif %}
-                            </td>
+                    <div class="btn-group">
+                        <a href="{% url 'baixar_lote_km' equipe_km_selecionada.id ano_atual mes_atual request.GET.semana|default:1 %}" 
+                           class="btn btn-outline-dark btn-sm fw-bold">
+                            <i class="fas fa-file-archive me-1"></i> Baixar Lote (ZIP)
+                        </a>
 
-                            <td class="text-center">
-                                {% if item.pode_assinar %}
-                                    <button type="button" 
-                                        onclick="abrirModalGestor(
-                                            {{ item.funcionario.id }}, 
-                                            '{{ item.funcionario.nome_completo }}', 
-                                            {{ item.mes }}, 
-                                            {{ item.ano }}, 
-                                            '{{ item.arquivo_assinado_url|default:'None' }}'
-                                        )"
-                                        class="btn btn-warning btn-sm text-white fw-bold rounded-pill px-4 shadow-sm"
-                                        style="background-color: #ff9800; border: none;">
-                                        <i class="fas fa-pen-nib me-2"></i> Assinar Ponto
-                                    </button>
-                                {% else %}
-                                    {% if item.status_gestor %}
-                                        <span class="text-success small fw-bold"><i class="fas fa-check-double"></i> Assinado</span>
-                                    {% else %}
-                                        <span class="text-muted small opacity-50"><i class="fas fa-ban"></i> Indisponível</span>
-                                    {% endif %}
-                                {% endif %}
-                            </td>
+                        <a href="{% url 'aprovar_semana_lote' equipe_km_selecionada.id ano_atual mes_atual request.GET.semana|default:1 %}" 
+                           class="btn btn-outline-success btn-sm fw-bold"
+                           onclick="return confirm('Tem certeza que deseja APROVAR TODOS os registros desta semana para a equipe {{ equipe_km_selecionada.nome }}?')">
+                            <i class="fas fa-check-double me-1"></i> Aprovar Semana
+                        </a>
+                    </div>
+                </div>
 
-                            <td class="text-end pe-4">
-                                <div class="d-flex justify-content-end gap-2">
-                                    <a href="{% url 'gerar_pdf_ponto' %}?mes={{ item.mes }}&ano={{ item.ano }}&funcionario_id={{ item.funcionario.id }}" 
-                                       target="_blank"
-                                       class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold" 
-                                       title="Ver Espelho">
-                                        <i class="far fa-file-alt"></i>
-                                    </a>
-
-                                    {% if item.arquivo_assinado_url %}
-                                        <a href="{{ item.arquivo_assinado_url }}" 
-                                           download="{{ item.nome_download }}"
-                                           class="btn btn-sm btn-outline-success rounded-pill px-3 fw-bold"
-                                           title="Baixar PDF">
-                                            <i class="fas fa-download"></i>
-                                        </a>
-                                    {% endif %}
-
-                                    <a href="{% url 'historico_funcionario' item.funcionario.id %}" 
-                                       class="btn btn-sm btn-light border rounded-circle text-muted" 
-                                       title="Histórico">
-                                        <i class="fas fa-history"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="4" class="text-center py-5">
-                                <div class="text-muted opacity-25 mb-3"><i class="fas fa-users-slash fa-3x"></i></div>
-                                <h6 class="fw-bold text-secondary">Nenhum colaborador encontrado.</h6>
-                            </td>
-                        </tr>
+                <div class="d-flex justify-content-center mb-4">
+                    <ul class="nav nav-pills bg-white p-2 rounded-pill shadow-sm border">
+                        {% for sem in semanas_do_mes %}
+                            <li class="nav-item">
+                                <a href="?mes={{ mes_atual }}&ano={{ ano_atual }}&km_team={{ equipe_km_selecionada.id }}&tab=km&semana={{ sem.numero }}" 
+                                   class="nav-link rounded-pill px-4 {% if sem.active %}active{% else %}text-muted{% endif %}">
+                                    <strong>Semana {{ sem.numero }}</strong> 
+                                    <small class="d-block text-center" style="font-size:0.7rem; opacity:0.8;">{{ sem.inicio|date:"d/m" }} - {{ sem.fim|date:"d/m" }}</small>
+                                </a>
+                            </li>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                    </ul>
+                </div>
 
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bold text-dark mb-0">
+                            <i class="fas fa-list-ul text-primary me-2"></i> Relatório da Semana {{ semana_selecionada }}
+                        </h6>
+                        <div class="position-relative" style="max-width: 300px;">
+                            <i class="fas fa-search text-muted position-absolute" style="left: 10px; top: 10px;"></i>
+                            <input type="text" id="searchKm" class="form-control form-control-sm rounded-pill ps-4 border-0 bg-light" placeholder="Filtrar nesta lista..." onkeyup="filterTable('searchKm', 'kmTable')">
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover align-middle mb-0" id="kmTable">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4 text-nowrap" style="width: 30%;">Colaborador</th>
+                                    <th class="text-center text-nowrap" style="width: 15%;">KM Total</th>
+                                    <th class="text-center text-nowrap" style="width: 15%;">Status</th>
+                                    <th class="text-center text-nowrap" style="width: 15%;">Relatório</th>
+                                    <th class="text-end pe-4 text-nowrap" style="width: 25%;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reg in dados_km_semana_atual %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="fw-bold text-dark">{{ reg.funcionario.nome_completo }}</div>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if reg.tem_registro %}
+                                            <span class="fw-bold text-dark fs-5">{{ reg.total_km }}</span> <small class="text-muted">km</small>
+                                        {% else %}
+                                            <span class="text-muted small">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if reg.status == 'Pendente' %}
+                                            <span class="badge badge-soft-warning text-dark px-3">Pendente</span>
+                                        {% elif reg.status == 'Aprovado' %}
+                                            <span class="badge badge-soft-info text-dark px-3">Aprovado</span>
+                                        {% elif reg.status == 'Pago' %}
+                                            <span class="badge badge-soft-success px-3">Pago</span>
+                                        {% elif reg.status == 'Rejeitado' %}
+                                            <span class="badge badge-soft-danger px-3">Rejeitado</span>
+                                        {% else %}
+                                            <span class="text-muted small">Vazio</span>
+                                        {% endif %}
+                                    </td>
+                                    
+                                    <td class="text-center">
+                                        {% if reg.tem_registro %}
+                                            <a href="{% url 'baixar_relatorio_excel' reg.funcionario.id %}?ano={{ ano_atual }}&mes={{ mes_atual }}&semana={{ request.GET.semana|default:1 }}" 
+                                               class="btn btn-sm btn-success text-white rounded-pill px-3 fw-bold shadow-sm" 
+                                               title="Baixar Excel">
+                                                <i class="fas fa-file-excel me-1"></i> Excel
+                                            </a>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-light text-muted border rounded-pill px-3" disabled>
+                                                <i class="fas fa-file-excel"></i>
+                                            </button>
+                                        {% endif %}
+                                    </td>
+
+                                    <td class="text-end pe-4">
+                                        {% if reg.tem_registro and reg.ids_km %}
+                                            {% with km_id=reg.ids_km|first %} 
+                                                {% if reg.status == 'Pendente' %}
+                                                    <a href="{% url 'aprovar_km_gestor' km_id %}" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="return confirm('Aprovar este registro?')">
+                                                        <i class="fas fa-check me-1"></i> Aprovar
+                                                    </a>
+                                                {% elif reg.status == 'Aprovado' %}
+                                                    <a href="{% url 'marcar_km_pago' km_id %}" class="btn btn-sm btn-success text-white rounded-pill px-3" onclick="return confirm('Marcar como pago?')">
+                                                        <i class="fas fa-dollar-sign me-1"></i> Pagar
+                                                    </a>
+                                                {% else %}
+                                                    <span class="text-success small fw-bold"><i class="fas fa-check-circle"></i> Finalizado</span>
+                                                {% endif %}
+                                            {% endwith %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">Nenhum registro para esta semana.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div> 
     </div>
 
     <div class="modal fade" id="modalGestor" tabindex="-1" aria-hidden="true">
@@ -345,16 +472,18 @@
                 btnDownload.innerText = 'Arquivo indisponível';
             }
 
+            // Monta a URL dinamicamente
             const baseUrl = "{% url 'assinar_ponto_gestor' 0 0 0 %}".replace('0/0/0/', ''); 
             document.getElementById('form-assinar-gestor').action = `${baseUrl}${funcId}/${mes}/${ano}/`;
 
             modalGestor.show();
         }
 
-        function filterTable() {
-            const input = document.getElementById("searchTeam");
+        // Filtro Genérico para Tabelas
+        function filterTable(inputId, tableId) {
+            const input = document.getElementById(inputId);
             const filter = input.value.toUpperCase();
-            const table = document.getElementById("teamTable");
+            const table = document.getElementById(tableId);
             const tr = table.getElementsByTagName("tr");
 
             for (let i = 1; i < tr.length; i++) {
