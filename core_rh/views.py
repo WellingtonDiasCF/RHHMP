@@ -2382,14 +2382,19 @@ def registro_km_view(request):
         chamado = request.POST.get('numero_chamado')
         nome_origem_input = request.POST.get('nome_origem')
         nome_destino_input = request.POST.get('nome_destino')
-        km_manual_str = request.POST.get('km_manual') # Novo campo
+        km_manual_str = request.POST.get('km_manual')
 
         data_final = timezone.now().date()
         if data_str:
             try: data_final = datetime.strptime(data_str, '%Y-%m-%d').date()
             except: pass
         
-        # Processa KM Manual (Substitui vírgula por ponto)
+        # --- TRAVA DE SEGURANÇA ---
+        if is_periodo_travado(funcionario, data_final):
+            messages.error(request, "ERRO: Esta semana já foi fechada/aprovada pelo gestor. Não é possível adicionar registros.")
+            return redirect('registro_km')
+        # --------------------------
+
         km_final = 0.0
         if km_manual_str:
             try: km_final = float(km_manual_str.replace(',', '.'))
@@ -2397,32 +2402,25 @@ def registro_km_view(request):
 
         if km_final > 0:
             try:
-                # Cria Controle Principal
                 controle = ControleKM.objects.create(
                     funcionario=funcionario, data=data_final, total_km=km_final, 
                     numero_chamado=chamado, status='Pendente'
                 )
-                
-                # Cria Trecho
-                # OBS: Salvamos o 'google_url' no campo 'origem' do modelo TrechoKM
-                # para que ele possa ser recuperado e colocado como link no Excel depois.
                 TrechoKM.objects.create(
                     controle=controle, 
-                    origem=google_url if google_url else "-", # Salva o LINK aqui
-                    destino='-', 
-                    km=km_final,
-                    nome_origem=nome_origem_input, 
-                    nome_destino=nome_destino_input
+                    origem=google_url if google_url else "-", 
+                    destino='-', km=km_final,
+                    nome_origem=nome_origem_input, nome_destino=nome_destino_input
                 )
-                messages.success(request, f"Rota de {km_final} km registrada com sucesso!")
+                messages.success(request, f"Rota de {km_final} km registrada!")
             except Exception as e:
-                messages.error(request, f"Erro ao salvar: {e}")
+                messages.error(request, f"Erro: {e}")
         else:
-            messages.error(request, "Informe a quilometragem válida (maior que 0).")
+            messages.error(request, "Informe a quilometragem válida.")
             
         return redirect('registro_km')
     
-    # Histórico (Mantido Igual)
+    # ... (Resto da função de histórico continua igual) ...
     kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:20]
     despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:20]
     
@@ -2430,81 +2428,10 @@ def registro_km_view(request):
     for k in kms:
         historico.append({'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 'valor': None, 'status': k.status})
     for d in despesas:
-        historico.append({'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 'status': d.status, 'comprovante': d.comprovante})
+        historico.append({'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 'status': d.status, 'comprovante': d.comprovante, 'especificacao': d.especificacao})
     
     historico.sort(key=lambda x: x['data'], reverse=True)
     return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
-    if not usuario_eh_campo(request.user):
-        return redirect('home')
-    
-    funcionario = request.user.funcionario
-
-    if request.method == 'POST':
-        google_url = request.POST.get('google_url')
-        data_str = request.POST.get('data_viagem')
-        chamado = request.POST.get('numero_chamado')
-        # Novos campos manuais
-        nome_origem_input = request.POST.get('nome_origem')
-        nome_destino_input = request.POST.get('nome_destino')
-        
-        data_final = timezone.now().date()
-        if data_str:
-            try: data_final = datetime.strptime(data_str, '%Y-%m-%d').date()
-            except: pass
-        
-        if google_url:
-            # Chama a função do Selenium (certifique-se que ela existe no arquivo)
-            distancia, orig_nome, dest_nome, msg = extrair_km_selenium(google_url)
-            
-            if distancia > 0:
-                try:
-                    controle = ControleKM.objects.create(
-                        funcionario=funcionario,
-                        data=data_final,
-                        total_km=distancia,
-                        numero_chamado=chamado,
-                        status='Pendente'
-                    )
-                    
-                    TrechoKM.objects.create(
-                        controle=controle,
-                        origem=orig_nome[:150], # Guarda o do Google para backup
-                        destino=dest_nome[:150],
-                        km=distancia,
-                        # Salva o que o técnico digitou
-                        nome_origem=nome_origem_input,
-                        nome_destino=nome_destino_input
-                    )
-                    messages.success(request, f"Sucesso! Rota de {distancia} km registrada.")
-                except Exception as e:
-                    messages.error(request, f"Erro ao salvar no banco: {e}")
-            else:
-                messages.error(request, f"Falha na leitura: {msg}.")
-            
-            return redirect('registro_km')
-    
-    # Histórico Unificado
-    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:20]
-    despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:20]
-    
-    historico = []
-    for k in kms:
-        historico.append({
-            'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 
-            'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 
-            'valor': None, 'status': k.status
-        })
-    for d in despesas:
-        historico.append({
-            'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 
-            'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 
-            'status': d.status, 'comprovante': d.comprovante,
-            'especificacao': d.especificacao
-        })
-    
-    historico.sort(key=lambda x: x['data'], reverse=True)
-    return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
-
 @login_required
 def baixar_relatorio_excel(request, func_id=None):
     # Essa view agora é apenas uma "casca" que chama a função geradora
@@ -2585,16 +2512,24 @@ def marcar_km_pago(request, controle_id):
 def excluir_km(request, km_id):
     c = get_object_or_404(ControleKM, id=km_id)
     if c.funcionario.usuario == request.user or request.user.is_superuser:
-        c.delete()
-        messages.success(request, "Removido")
+        # --- TRAVA DE EXCLUSÃO ---
+        if c.status in ['Aprovado', 'Pago']:
+            messages.error(request, "Não é possível excluir um registro já Aprovado ou Pago.")
+        else:
+            c.delete()
+            messages.success(request, "Removido")
     return redirect('registro_km')
 
 @login_required
 def excluir_despesa(request, despesa_id):
     d = get_object_or_404(DespesaDiversa, id=despesa_id)
     if d.funcionario.usuario == request.user or request.user.is_superuser:
-        d.delete()
-        messages.success(request, "Despesa Removida")
+        # --- TRAVA DE EXCLUSÃO ---
+        if d.status in ['Aprovado', 'Pago']:
+            messages.error(request, "Não é possível excluir uma despesa já Aprovada ou Paga.")
+        else:
+            d.delete()
+            messages.success(request, "Despesa Removida")
     return redirect('registro_km')
 
 @login_required
@@ -2605,6 +2540,13 @@ def salvar_despesa_diversa_view(request):
 
     try:
         data = request.POST.get('data_despesa')
+        
+        # --- TRAVA DE SEGURANÇA ---
+        if is_periodo_travado(funcionario, data):
+            messages.error(request, "ERRO: Semana já aprovada. Não é possível lançar despesas nesta data.")
+            return redirect('registro_km')
+        # --------------------------
+
         chamado = request.POST.get('numero_chamado')
         tipo = request.POST.get('tipo_despesa')
         espec = request.POST.get('especificacao')
@@ -2631,7 +2573,6 @@ def salvar_despesa_diversa_view(request):
         messages.error(request, f"Erro: {e}")
 
     return redirect('registro_km')
-
 @login_required
 def atualizar_dados_tecnico(request):
     if request.method == 'POST':
@@ -2672,16 +2613,17 @@ def repetir_rota_view(request):
             km_id = request.POST.get('km_id')
             nova_data = request.POST.get('nova_data')
             novo_chamado = request.POST.get('novo_chamado')
-
-            # Busca o original
-            original_controle = get_object_or_404(ControleKM, id=km_id)
             
-            # Verifica permissão (só o próprio dono pode repetir)
+            # --- TRAVA DE SEGURANÇA ---
+            if is_periodo_travado(request.user.funcionario, nova_data):
+                messages.error(request, "ERRO: A data escolhida pertence a uma semana já fechada/aprovada.")
+                return redirect('registro_km')
+            # --------------------------
+
+            original_controle = get_object_or_404(ControleKM, id=km_id)
             if original_controle.funcionario.usuario != request.user:
-                messages.error(request, "Permissão negada.")
                 return redirect('registro_km')
 
-            # Cria o Novo Controle (Cópia do Pai)
             novo_controle = ControleKM.objects.create(
                 funcionario=request.user.funcionario,
                 data=nova_data,
@@ -2690,23 +2632,44 @@ def repetir_rota_view(request):
                 status='Pendente'
             )
 
-            # Cria o Novo Trecho (Cópia dos Filhos)
-            # Geralmente é 1 trecho, mas se tiver mais, copiamos o primeiro que contém os dados principais
             trecho_original = original_controle.trechos.first()
-            
             if trecho_original:
                 TrechoKM.objects.create(
                     controle=novo_controle,
-                    origem=trecho_original.origem, # Aqui está o Link
+                    origem=trecho_original.origem,
                     destino=trecho_original.destino,
                     km=trecho_original.km,
                     nome_origem=trecho_original.nome_origem,
                     nome_destino=trecho_original.nome_destino
                 )
-
             messages.success(request, "Rota repetida com sucesso!")
-
         except Exception as e:
-            messages.error(request, f"Erro ao repetir rota: {e}")
+            messages.error(request, f"Erro: {e}")
 
     return redirect('registro_km')
+def is_periodo_travado(funcionario, data_ref):
+    """
+    Retorna True se a semana da data_ref já tiver itens Aprovados ou Pagos.
+    Bloqueia edição para manter a integridade do relatório do gestor.
+    """
+    if isinstance(data_ref, str):
+        try: data_ref = datetime.strptime(data_ref, '%Y-%m-%d').date()
+        except: return False # Se data inválida, deixa a view tratar
+        
+    start = data_ref - timedelta(days=data_ref.weekday()) # Segunda
+    end = start + timedelta(days=6) # Domingo
+    
+    # Verifica se existe KM ou Despesa com status finalizado nessa semana
+    bloq_km = ControleKM.objects.filter(
+        funcionario=funcionario, 
+        data__range=[start, end], 
+        status__in=['Aprovado', 'Pago']
+    ).exists()
+    
+    bloq_desp = DespesaDiversa.objects.filter(
+        funcionario=funcionario, 
+        data__range=[start, end], 
+        status__in=['Aprovado', 'Pago']
+    ).exists()
+    
+    return bloq_km or bloq_desp
