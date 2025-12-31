@@ -306,8 +306,10 @@ class Atestado(models.Model):
 class ControleKM(models.Model):
     STATUS_CHOICES = [
         ('Pendente', 'Pendente'),
-        ('Aprovado', 'Aprovado'),
-        ('Pago', 'Pago'),
+        ('Aprovado_Regional', 'Aprovado Regional'), # 1ª Aprovação
+        ('Aprovado_Matriz', 'Aprovado Matriz'),     # 2ª Aprovação (Grupo Gestão)
+        ('Aprovado_Financeiro', 'Aprovado Financeiro'), # 3ª Aprovação (Grupo Financeiro)
+        ('Pago', 'Pago'),                           # Final (Grupo Financeiro)
         ('Rejeitado', 'Rejeitado'),
     ]
 
@@ -315,11 +317,11 @@ class ControleKM(models.Model):
     data = models.DateField()
     total_km = models.DecimalField(max_digits=8, decimal_places=2)
     
-    # --- CAMPO QUE ESTAVA FALTANDO ---
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pendente')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pendente') # Aumentei max_length por segurança
     
     created_at = models.DateTimeField(auto_now_add=True)
     numero_chamado = models.CharField(max_length=50, null=True, blank=True, verbose_name="Nº Chamado")
+
     def __str__(self):
         return f"{self.funcionario.nome_completo} - {self.data}"
 class DespesaDiversa(models.Model):
@@ -338,7 +340,7 @@ class DespesaDiversa(models.Model):
     especificacao = models.CharField(max_length=255, blank=True, null=True, help_text="Preencher se for 'Outra'")
     comprovante = models.FileField(upload_to='despesas_diversas/%Y/%m/')
     valor = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, mas recomendado
-    status = models.CharField(max_length=20, default='Pendente')
+    status = models.CharField(max_length=50, default='Pendente')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -346,7 +348,7 @@ class DespesaDiversa(models.Model):
 
 class TrechoKM(models.Model):
     controle = models.ForeignKey(ControleKM, related_name='trechos', on_delete=models.CASCADE)
-    origem = models.CharField(max_length=255)
+    origem = models.TextField(verbose_name="Link ou Origem")
     destino = models.CharField(max_length=255)
     km = models.DecimalField(max_digits=6, decimal_places=2)
     nome_origem = models.CharField("Nome da Origem", max_length=150, blank=True, null=True)

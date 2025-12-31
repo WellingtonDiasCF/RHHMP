@@ -62,8 +62,8 @@ urlpatterns = [
     # --- REGISTRO DE KM ---
     path('km/', views.registro_km_view, name='registro_km'),
     path('km/excluir/<int:km_id>/', views.excluir_km, name='excluir_km'),
-    path('gestor/km/aprovar/<int:controle_id>/', views.aprovar_km_gestor, name='aprovar_km_gestor'),
-    path('gestor/km/pagar/<int:controle_id>/', views.marcar_km_pago, name='marcar_km_pago'),
+    path('gestor/km/avancar/<int:controle_id>/', views.avancar_status_km, name='avancar_status_km'),
+    path('gestor/km/rejeitar/<int:controle_id>/', views.rejeitar_km_gestor, name='rejeitar_km_gestor'),
     path('despesas/salvar_diversa/', views.salvar_despesa_diversa_view, name='salvar_despesa_diversa'),
     path('atualizar-dados-tecnico/', views.atualizar_dados_tecnico, name='atualizar_dados_tecnico'),
     path('baixar-relatorio-excel/<int:func_id>/', views.baixar_relatorio_excel, name='baixar_relatorio_excel'),
@@ -71,4 +71,6 @@ urlpatterns = [
     path('baixar-lote-km/<int:equipe_id>/<int:ano>/<int:mes>/<int:semana>/', views.baixar_lote_km, name='baixar_lote_km'),
     path('aprovar-lote-km/<int:equipe_id>/<int:ano>/<int:mes>/<int:semana>/', views.aprovar_semana_lote, name='aprovar_semana_lote'),
     path('repetir-rota/', views.repetir_rota_view, name='repetir_rota_view'),
+    path('resetar-status/', views.resetar_status_bugados, name='resetar_status'),
+    path('gestor/relatorio/customizado/', views.gerar_relatorio_customizado, name='gerar_relatorio_customizado'),
 ]

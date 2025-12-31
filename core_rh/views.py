@@ -22,7 +22,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.db.models import Sum
-
+from django.db import transaction
 # PDF e Relatórios
 import pdfplumber
 from reportlab.pdfgen import canvas
@@ -33,7 +33,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.utils import get_column_letter
-
+from openpyxl.styles import NamedStyle
+from collections import defaultdict
 # Utils Extras
 import holidays 
 try:
@@ -747,7 +748,7 @@ def area_gestor_view(request):
 
             ini, fim = range_semana_atual
             
-            for f in funcs_campo:
+    for f in funcs_campo:
                 kms = ControleKM.objects.filter(funcionario=f, data__range=[ini, fim])
                 despesas = DespesaDiversa.objects.filter(funcionario=f, data__range=[ini, fim])
                 
@@ -757,10 +758,27 @@ def area_gestor_view(request):
                 ids_km = []
                 
                 if tem_algo:
-                    if kms.filter(status='Rejeitado').exists() or despesas.filter(status='Rejeitado').exists(): status_geral = 'Rejeitado'
-                    elif kms.filter(status='Pendente').exists() or despesas.filter(status='Pendente').exists(): status_geral = 'Pendente'
-                    elif kms.filter(status='Aprovado').exists() or despesas.filter(status='Aprovado').exists(): status_geral = 'Aprovado'
-                    elif kms.filter(status='Pago').exists() or despesas.filter(status='Pago').exists(): status_geral = 'Pago'
+                    # Coleta todos os status presentes nesta semana
+                    st_km = list(kms.values_list('status', flat=True))
+                    st_dp = list(despesas.values_list('status', flat=True))
+                    todos_status = set(st_km + st_dp)
+
+                    # Lógica de Prioridade para Exibição (Do mais "grave" para o mais "concluído")
+                    if 'Rejeitado' in todos_status:
+                        status_geral = 'Rejeitado'
+                    elif 'Pendente' in todos_status:
+                        status_geral = 'Pendente'
+                    elif 'Aprovado_Regional' in todos_status:
+                        status_geral = 'Aprovado_Regional'
+                    elif 'Aprovado_Matriz' in todos_status:
+                        status_geral = 'Aprovado_Matriz'
+                    elif 'Aprovado_Financeiro' in todos_status:
+                        status_geral = 'Aprovado_Financeiro'
+                    elif 'Pago' in todos_status:
+                        status_geral = 'Pago'
+                    elif 'Aprovado' in todos_status: # Suporte legado
+                        status_geral = 'Aprovado_Matriz' # Trata antigos como Matriz para avançar
+                    
                     ids_km = list(kms.values_list('id', flat=True))
 
                 dados_km_semana_atual.append({
@@ -783,7 +801,9 @@ def area_gestor_view(request):
         'equipe_km_selecionada': equipe_km_selecionada,
         'semanas_do_mes': semanas_do_mes,
         'dados_km_semana_atual': dados_km_semana_atual,
-        'semana_selecionada': semana_selecionada
+        'semana_selecionada': semana_selecionada,
+        'is_gestao': usuario_eh_gestao(request.user),
+        'is_financeiro': usuario_eh_financeiro(request.user),        
     })
 @login_required
 def assinar_ponto_gestor(request, func_id, mes, ano):
@@ -1960,120 +1980,6 @@ def rh_acao_atestado(request):
         
     return redirect(request.META.get('HTTP_REFERER', '/admin/'))
 
-# --- SUBSTITUA AS FUNÇÕES: extrair_km_selenium E registro_km_view NO core_rh/views.py ---
-
-def extrair_km_selenium(url):
-    """
-    Abre Edge, extrai KM e também os NOMES da Origem/Destino baseados na URL final expandida.
-    Retorna: (distancia_float, nome_origem, nome_destino, mensagem_erro)
-    """
-    from selenium import webdriver
-    from selenium.webdriver.edge.service import Service as EdgeService
-    from selenium.webdriver.edge.options import Options as EdgeOptions
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from webdriver_manager.microsoft import EdgeChromiumDriverManager
-    import re
-    from urllib.parse import unquote # Importante para limpar os nomes
-    
-    edge_options = EdgeOptions()
-    edge_options.add_argument("--headless")
-    edge_options.add_argument("--no-sandbox")
-    edge_options.add_argument("--disable-dev-shm-usage")
-    edge_options.add_argument("--disable-gpu")
-    edge_options.add_argument("--remote-debugging-port=9222")
-    edge_options.add_argument("--lang=pt-BR")
-    edge_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0")
-
-    driver = None
-    origem_detectada = "Origem Desconhecida"
-    destino_detectado = "Destino Desconhecido"
-
-    try:
-        print("--- INICIANDO SELENIUM EDGE ---")
-        try:
-            service = EdgeService(EdgeChromiumDriverManager().install())
-        except:
-            service = EdgeService()
-
-        driver = webdriver.Edge(service=service, options=edge_options)
-        
-        if "?" in url: url += "&units=metric"
-        else: url += "?units=metric"
-
-        driver.get(url)
-
-        # Espera carregar
-        wait = WebDriverWait(driver, 12)
-        try:
-            wait.until(EC.presence_of_element_located((By.XPATH, "//*[contains(text(), ' km')]")))
-        except: pass
-
-        # --- NOVA LÓGICA DE NOMES: Extrair da URL Final ---
-        # Quando você usa link curto, o Google redireciona. 
-        # A URL final fica: .../maps/dir/Origem+Completa/Destino+Completo/...
-        url_final = driver.current_url
-        print(f"--- URL FINAL RESOLVIDA: {url_final} ---")
-
-        if "/dir/" in url_final:
-            try:
-                # Pega o que vem depois de /dir/
-                trecho_rota = url_final.split("/dir/")[1]
-                # Geralmente separado por /
-                partes = trecho_rota.split("/")
-                
-                if len(partes) >= 2:
-                    # Limpeza: unquote troca %20 por espaço, replace troca + por espaço
-                    raw_origem = unquote(partes[0]).replace('+', ' ')
-                    raw_destino = unquote(partes[1]).replace('+', ' ')
-                    
-                    # Remove coordenadas se vierem grudadas (ex: Rua A/@-23.444...)
-                    origem_detectada = raw_origem.split('/@')[0].split('!')[0]
-                    destino_detectado = raw_destino.split('/@')[0].split('!')[0]
-            except Exception as e_url:
-                print(f"Erro ao ler nomes da URL: {e_url}")
-
-        # --- LÓGICA DE KM (MANTIDA) ---
-        try:
-            body_text = driver.find_element(By.TAG_NAME, "body").text
-            page_source = driver.page_source
-            tudo = body_text + " " + page_source
-        except:
-            tudo = driver.page_source
-
-        distancias_validas = []
-        regex_km = r'(\d+[,.]\d+)\s*km'
-        matches = re.findall(regex_km, tudo)
-        
-        for m in matches:
-            try:
-                valor = float(m.replace(',', '.'))
-                if 0.5 <= valor < 20000:
-                    distancias_validas.append(valor)
-            except: pass
-
-        if not distancias_validas:
-            return 0.0, origem_detectada, destino_detectado, "Nenhuma distância encontrada."
-
-        max_rota = max(distancias_validas)
-        limite_ruido = max_rota * 0.05 
-        if limite_ruido < 1.0: limite_ruido = 0.5 
-
-        rotas_finais = [d for d in distancias_validas if d > limite_ruido]
-        if not rotas_finais: rotas_finais = distancias_validas
-
-        menor_km = min(rotas_finais)
-        
-        return menor_km, origem_detectada, destino_detectado, "Sucesso"
-
-    except Exception as e:
-        return 0.0, origem_detectada, destino_detectado, f"Erro técnico: {str(e)}"
-    finally:
-        if driver:
-            try: driver.quit()
-            except: pass
-
 @login_required
 def excluir_despesa(request, despesa_id):
     despesa = get_object_or_404(DespesaDiversa, id=despesa_id)
@@ -2326,6 +2232,10 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
 # --- APROVAÇÃO EM LOTE (NOVO) ---
 @login_required
 def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
+    from datetime import date, timedelta
+    from calendar import monthcalendar
+    
+    # 1. Cálculo de Datas
     try:
         semana_idx = int(semana) - 1
         cal = monthcalendar(int(ano), int(mes))
@@ -2339,36 +2249,55 @@ def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
         dt_inicio = data_ref - timedelta(days=data_ref.weekday())
         dt_fim = dt_inicio + timedelta(days=6)
     except:
-        messages.error(request, "Data inválida para aprovação.")
+        messages.error(request, "Data inválida.")
         return redirect('area_gestor')
 
     equipe = get_object_or_404(Equipe, id=equipe_id)
     funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
 
-    # Aprova KMs Pendentes
-    kms = ControleKM.objects.filter(
-        funcionario__in=funcionarios,
-        data__range=[dt_inicio, dt_fim],
-        status='Pendente'
-    )
-    qtd_kms = kms.update(status='Aprovado')
-    
-    # Aprova Despesas Pendentes
-    despesas = DespesaDiversa.objects.filter(
-        funcionario__in=funcionarios,
-        data__range=[dt_inicio, dt_fim],
-        status='Pendente'
-    )
-    qtd_desp = despesas.update(status='Aprovado')
-    
-    if qtd_kms > 0 or qtd_desp > 0:
-        messages.success(request, f"Lote Aprovado: {qtd_kms} roteiros e {qtd_desp} despesas atualizados!")
+    kms_qs = ControleKM.objects.filter(funcionario__in=funcionarios, data__range=[dt_inicio, dt_fim])
+    desp_qs = DespesaDiversa.objects.filter(funcionario__in=funcionarios, data__range=[dt_inicio, dt_fim])
+
+    count = 0
+    etapa = ""
+
+    # LÓGICA ESTRITA DE HIERARQUIA
+    # O lote só move o que está na "caixa de entrada" daquela função específica
+
+    if usuario_eh_financeiro(request.user):
+        # Financeiro tem 2 passos: Aprovar o que veio da Matriz E Pagar o que ele já aprovou
+        # 1. Aprovado_Matriz -> Aprovado_Financeiro
+        k1 = kms_qs.filter(status='Aprovado_Matriz').update(status='Aprovado_Financeiro')
+        d1 = desp_qs.filter(status='Aprovado_Matriz').update(status='Aprovado_Financeiro')
+        
+        # 2. Aprovado_Financeiro -> Pago
+        k2 = kms_qs.filter(status='Aprovado_Financeiro').update(status='Pago')
+        d2 = desp_qs.filter(status='Aprovado_Financeiro').update(status='Pago')
+        
+        count = k1 + d1 + k2 + d2
+        etapa = "Financeiro"
+
+    elif usuario_eh_gestao(request.user):
+        # Matriz SÓ aprova o que já é 'Aprovado_Regional'
+        # Não toca em 'Pendente'
+        k = kms_qs.filter(status='Aprovado_Regional').update(status='Aprovado_Matriz')
+        d = desp_qs.filter(status='Aprovado_Regional').update(status='Aprovado_Matriz')
+        count = k + d
+        etapa = "Matriz"
+
     else:
-        messages.info(request, "Nenhum item pendente para aprovar nesta semana.")
+        # Regional (Gestor Comum) SÓ aprova o que é 'Pendente'
+        k = kms_qs.filter(status='Pendente').update(status='Aprovado_Regional')
+        d = desp_qs.filter(status='Pendente').update(status='Aprovado_Regional')
+        count = k + d
+        etapa = "Regional"
+    
+    if count > 0:
+        messages.success(request, f"Lote ({etapa}) processado: {count} itens avançaram de etapa.")
+    else:
+        messages.info(request, f"Nenhum item aguardando a etapa ({etapa}) nesta semana.")
         
     return redirect('area_gestor')
-
-# --- VIEWS DE REGISTRO E GESTÃO INDIVIDUAL (ATUALIZADAS) ---
 
 # --- REGISTRO KM E DOWNLOAD INDIVIDUAL (SEM SELENIUM - 100% MANUAL) ---
 @login_required
@@ -2402,7 +2331,8 @@ def registro_km_view(request):
 
         if km_final > 0:
             try:
-                controle = ControleKM.objects.create(
+                with transaction.atomic():
+                    controle = ControleKM.objects.create(
                     funcionario=funcionario, data=data_final, total_km=km_final, 
                     numero_chamado=chamado, status='Pendente'
                 )
@@ -2476,36 +2406,86 @@ def baixar_relatorio_excel(request, func_id=None):
     return response
 
 @login_required
-def aprovar_km_gestor(request, controle_id):
+def avancar_status_km(request, controle_id):
     km = get_object_or_404(ControleKM, id=controle_id)
-    km.status = 'Aprovado'
-    km.save()
-    
-    # Sincroniza a semana inteira
-    dt = km.data
-    ini = dt - timedelta(days=dt.weekday())
-    fim = ini + timedelta(days=6)
-    
-    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Aprovado')
-    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Aprovado')
-    
-    messages.success(request, f"Semana de {ini.strftime('%d/%m')} aprovada (KMs e Despesas).")
-    return redirect('area_gestor')
+    user = request.user
+    status_atual = km.status
+    novo_status = None
+    msg_sucesso = ""
 
+    # REINICIAR (Se estiver rejeitado ou vazio/bugado)
+    if status_atual == 'Rejeitado' or status_atual == '':
+        novo_status = 'Pendente'
+        msg_sucesso = "Registro reiniciado para Pendente."
+
+    # 1. Pendente -> Aprovado Regional
+    elif status_atual == 'Pendente':
+        novo_status = 'Aprovado_Regional'
+        msg_sucesso = "Aprovação Regional realizada."
+
+    # 2. Regional -> Matriz
+    elif status_atual == 'Aprovado_Regional': # Verifica se o texto está exato
+        if usuario_eh_gestao(user):
+            novo_status = 'Aprovado_Matriz'
+            msg_sucesso = "Aprovação da Matriz realizada."
+        else:
+            messages.error(request, "Permissão negada: Necessário equipe Gestão/Matriz.")
+            return redirect('area_gestor')
+
+    # 3. Matriz -> Financeiro
+    elif status_atual == 'Aprovado_Matriz':
+        if usuario_eh_financeiro(user):
+            novo_status = 'Aprovado_Financeiro'
+            msg_sucesso = "Aprovação Financeira realizada."
+        else:
+            messages.error(request, "Permissão negada: Necessário equipe Financeiro.")
+            return redirect('area_gestor')
+
+    # 4. Financeiro -> Pago
+    elif status_atual == 'Aprovado_Financeiro':
+        if usuario_eh_financeiro(user):
+            novo_status = 'Pago'
+            msg_sucesso = "Pagamento confirmado."
+        else:
+            messages.error(request, "Permissão negada.")
+            return redirect('area_gestor')
+
+    if novo_status:
+        # Atualiza
+        km.status = novo_status
+        km.save()
+        
+        # Sincroniza semana
+        dt = km.data
+        ini = dt - timedelta(days=dt.weekday())
+        fim = ini + timedelta(days=6)
+        
+        DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
+        ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
+        
+        messages.success(request, msg_sucesso)
+    else:
+        # Se caiu aqui, é porque o status no banco não bate com a lógica
+        messages.warning(request, f"Status desconhecido ou permissão insuficiente. Status atual: {status_atual}")
+
+    return redirect('area_gestor')
 @login_required
-def marcar_km_pago(request, controle_id):
+def rejeitar_km_gestor(request, controle_id):
     km = get_object_or_404(ControleKM, id=controle_id)
-    km.status = 'Pago'
-    km.save()
+    
+    # MUDANÇA AQUI: Define o status diretamente como 'Pendente'
+    # Assim o técnico já consegue editar/corrigir imediatamente.
+    novo_status = 'Pendente'
     
     dt = km.data
     ini = dt - timedelta(days=dt.weekday())
     fim = ini + timedelta(days=6)
+
+    # Reverte a semana inteira para Pendente
+    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
+    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
     
-    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Pago')
-    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status='Pago')
-    
-    messages.success(request, "Semana marcada como Paga.")
+    messages.warning(request, "Semana devolvida para correção (Status voltou para Pendente).")
     return redirect('area_gestor')
 
 @login_required
@@ -2649,27 +2629,420 @@ def repetir_rota_view(request):
     return redirect('registro_km')
 def is_periodo_travado(funcionario, data_ref):
     """
-    Retorna True se a semana da data_ref já tiver itens Aprovados ou Pagos.
+    Retorna True se a semana da data_ref já tiver itens em processo de aprovação ou pagos.
     Bloqueia edição para manter a integridade do relatório do gestor.
     """
     if isinstance(data_ref, str):
         try: data_ref = datetime.strptime(data_ref, '%Y-%m-%d').date()
-        except: return False # Se data inválida, deixa a view tratar
+        except: return False 
         
     start = data_ref - timedelta(days=data_ref.weekday()) # Segunda
     end = start + timedelta(days=6) # Domingo
     
-    # Verifica se existe KM ou Despesa com status finalizado nessa semana
+    # Lista de status que bloqueiam a edição (qualquer coisa que não seja Pendente ou Rejeitado)
+    status_bloqueio = [
+        'Aprovado_Regional', 
+        'Aprovado_Matriz', 
+        'Aprovado_Financeiro', 
+        'Pago', 
+        'Aprovado' # Mantido para compatibilidade com dados antigos
+    ]
+    
     bloq_km = ControleKM.objects.filter(
         funcionario=funcionario, 
         data__range=[start, end], 
-        status__in=['Aprovado', 'Pago']
+        status__in=status_bloqueio
     ).exists()
     
     bloq_desp = DespesaDiversa.objects.filter(
         funcionario=funcionario, 
         data__range=[start, end], 
-        status__in=['Aprovado', 'Pago']
+        status__in=status_bloqueio
     ).exists()
     
     return bloq_km or bloq_desp
+def usuario_eh_gestao(user):
+    """Verifica se o usuário está na equipe 'Gestão' ou 'Matriz' (Ignora acentos/case)."""
+    if not user.is_authenticated: return False
+    if user.is_superuser: return True
+    
+    try:
+        func = user.funcionario
+        # Lista de nomes aceitos (Adicione variações aqui)
+        nomes_permitidos = ['Gestão', 'Gestao', 'Matriz', 'Diretoria', 'Administrativo']
+        
+        # Verifica Equipe Principal
+        if func.equipe and func.equipe.nome in nomes_permitidos:
+            return True
+            
+        # Verifica Equipes Secundárias
+        if func.outras_equipes.filter(nome__in=nomes_permitidos).exists():
+            return True
+    except:
+        pass
+    return False
+
+def usuario_eh_financeiro(user):
+    """Verifica se o usuário está na equipe 'Financeiro'."""
+    if not user.is_authenticated: return False
+    if user.is_superuser: return True
+    
+    try:
+        func = user.funcionario
+        nomes_permitidos = ['Financeiro', 'Financeira', 'Finanças']
+        
+        if func.equipe and func.equipe.nome in nomes_permitidos:
+            return True
+        if func.outras_equipes.filter(nome__in=nomes_permitidos).exists():
+            return True
+    except:
+        pass
+    return False
+
+@login_required
+def resetar_status_bugados(request):
+    if not request.user.is_superuser: return redirect('home')
+    
+    # Reseta tudo que não for um status válido padrão
+    status_validos = ['Pendente', 'Aprovado_Regional', 'Aprovado_Matriz', 'Aprovado_Financeiro', 'Pago', 'Rejeitado']
+    
+    qtd = ControleKM.objects.exclude(status__in=status_validos).update(status='Pendente')
+    DespesaDiversa.objects.exclude(status__in=status_validos).update(status='Pendente')
+    
+    messages.success(request, f"{qtd} registros corrompidos foram resetados para Pendente.")
+    return redirect('area_gestor')
+
+# Certifique-se de ter estes imports no topo
+
+
+
+from collections import defaultdict
+from datetime import datetime
+
+@login_required
+def gerar_relatorio_customizado(request):
+    if request.method != 'POST':
+        return redirect('area_gestor')
+
+    # 1. VALIDAÇÃO E FILTROS
+    try:
+        data_inicio = datetime.strptime(request.POST.get('data_inicio'), '%Y-%m-%d').date()
+        data_fim = datetime.strptime(request.POST.get('data_fim'), '%Y-%m-%d').date()
+        equipes_ids = request.POST.getlist('equipes')
+    except (ValueError, TypeError):
+        messages.error(request, "Dados inválidos.")
+        return redirect('area_gestor')
+
+    if not equipes_ids:
+        messages.error(request, "Selecione ao menos uma equipe.")
+        return redirect('area_gestor')
+
+    # 2. QUERIES
+    equipes = Equipe.objects.filter(id__in=equipes_ids)
+    funcionarios = Funcionario.objects.filter(Q(equipe__in=equipes) | Q(outras_equipes__in=equipes)).distinct()
+
+    kms = ControleKM.objects.filter(funcionario__in=funcionarios, data__range=[data_inicio, data_fim]).exclude(status='Rejeitado').select_related('funcionario', 'funcionario__equipe')
+    despesas = DespesaDiversa.objects.filter(funcionario__in=funcionarios, data__range=[data_inicio, data_fim]).exclude(status='Rejeitado').select_related('funcionario', 'funcionario__equipe')
+
+    # 3. ESTRUTURAS DE DADOS
+    
+    # Estrutura GLOBAL
+    global_data = defaultdict(lambda: {
+        'total_periodo': 0.0,
+        'mensal': defaultdict(float),
+        'semanal': defaultdict(float),
+        'diario': defaultdict(float)
+    })
+
+    # Estrutura DETALHADA POR FILIAL (Antiga Equipe)
+    team_data = defaultdict(lambda: defaultdict(lambda: {
+        'total_periodo': 0.0,
+        'tipos': defaultdict(float),
+        'mensal': defaultdict(lambda: defaultdict(float)),
+        'semanal': defaultdict(lambda: defaultdict(float)),
+        'diario': defaultdict(lambda: defaultdict(float))
+    }))
+
+    all_months = set()
+    all_weeks = set()
+    all_days = set()
+    all_types = set()
+
+    # --- FUNÇÃO DE LIMPEZA DO NOME (FILIAL) ---
+    def get_filial_name(func):
+        raw_name = "Indefinida"
+        if func.equipe and str(func.equipe.id) in equipes_ids: 
+            raw_name = func.equipe.nome
+        else:
+            for eq in func.outras_equipes.all():
+                if str(eq.id) in equipes_ids: 
+                    raw_name = eq.nome
+                    break
+        
+        # Remove "Campo " (com o espaço) e retorna
+        # Ex: "Campo CIAUSRE" -> "CIAUSRE"
+        return raw_name.replace("Campo ", "").replace("campo ", "")
+
+    # --- PROCESSA KMs ---
+    for k in kms:
+        func = k.funcionario
+        filial = get_filial_name(func) # Nome já limpo
+        nome = func.nome_completo
+        val = float(k.total_km) * (float(func.valor_km) if func.valor_km else 0.0)
+        
+        mes = k.data.strftime('%m/%Y')
+        sem = f"{k.data.isocalendar()[1]}/{k.data.year}"
+        dia = k.data.strftime('%d/%m/%Y')
+
+        # Popula GLOBAL
+        global_data[filial]['total_periodo'] += val
+        global_data[filial]['mensal'][mes] += val
+        global_data[filial]['semanal'][sem] += val
+        global_data[filial]['diario'][dia] += val
+
+        # Popula DETALHADO
+        ref = team_data[filial][nome]
+        ref['total_periodo'] += val
+        ref['tipos']['KM'] += val
+        ref['mensal'][mes]['KM'] += val
+        ref['semanal'][sem]['KM'] += val
+        ref['diario'][dia]['KM'] += val
+
+        all_months.add(mes)
+        all_weeks.add(sem)
+        all_days.add(dia)
+        all_types.add('KM')
+
+    # --- PROCESSA DESPESAS ---
+    for d in despesas:
+        func = d.funcionario
+        filial = get_filial_name(func) # Nome já limpo
+        nome = func.nome_completo
+        val = float(d.valor)
+        tipo = d.tipo 
+        
+        mes = d.data.strftime('%m/%Y')
+        sem = f"{d.data.isocalendar()[1]}/{d.data.year}"
+        dia = d.data.strftime('%d/%m/%Y')
+
+        # Popula GLOBAL
+        global_data[filial]['total_periodo'] += val
+        global_data[filial]['mensal'][mes] += val
+        global_data[filial]['semanal'][sem] += val
+        global_data[filial]['diario'][dia] += val
+
+        # Popula DETALHADO
+        ref = team_data[filial][nome]
+        ref['total_periodo'] += val
+        ref['tipos'][tipo] += val
+        ref['mensal'][mes][tipo] += val
+        ref['semanal'][sem][tipo] += val
+        ref['diario'][dia][tipo] += val
+
+        all_months.add(mes)
+        all_weeks.add(sem)
+        all_days.add(dia)
+        all_types.add(tipo)
+
+    # Ordenações
+    sorted_months = sorted(list(all_months), key=lambda x: datetime.strptime(x, '%m/%Y'))
+    sorted_days = sorted(list(all_days), key=lambda x: datetime.strptime(x, '%d/%m/%Y'))
+    sorted_weeks = sorted(list(all_weeks), key=lambda x: (int(x.split('/')[1]), int(x.split('/')[0])))
+    
+    # Ordena tipos garantindo KM primeiro
+    temp_types = list(all_types)
+    if 'KM' in temp_types:
+        temp_types.remove('KM')
+        sorted_types = ['KM'] + sorted(temp_types)
+    else:
+        sorted_types = sorted(temp_types)
+
+    # 4. EXCEL GENERATION
+    wb = Workbook()
+    
+    # Estilos
+    header_style = NamedStyle(name="header")
+    header_style.font = Font(bold=True, color="FFFFFF")
+    header_style.fill = PatternFill("solid", fgColor="4F81BD")
+    header_style.alignment = Alignment(horizontal="center", vertical="center")
+    
+    period_header_style = NamedStyle(name="period_header")
+    period_header_style.font = Font(bold=True)
+    period_header_style.fill = PatternFill("solid", fgColor="DCE6F1")
+    period_header_style.alignment = Alignment(horizontal="center")
+    
+    money_fmt = 'R$ #,##0.00'
+    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+    # Função de ajuste de largura
+    def auto_adjust_width(ws):
+        for column in ws.columns:
+            max_length = 0
+            column_letter = get_column_letter(column[0].column)
+            for cell in column:
+                try:
+                    if cell.value:
+                        cell_len = len(str(cell.value))
+                        if cell.font and cell.font.bold: cell_len *= 1.2
+                        if cell_len > max_length: max_length = cell_len
+                except: pass
+            adjusted_width = (max_length + 2) * 1.1
+            if adjusted_width < 12: adjusted_width = 12
+            if adjusted_width > 60: adjusted_width = 60
+            ws.column_dimensions[column_letter].width = adjusted_width
+
+    def write_header(ws, row, cols, col_offset=1):
+        for i, c in enumerate(cols):
+            cell = ws.cell(row=row, column=i+col_offset, value=c)
+            cell.style = header_style
+            cell.border = border
+
+    def write_row(ws, row, cols, bold_last=False):
+        for i, val in enumerate(cols, 1):
+            cell = ws.cell(row=row, column=i, value=val)
+            cell.border = border
+            if isinstance(val, (int, float)):
+                cell.number_format = money_fmt
+            if bold_last and i == len(cols):
+                cell.font = Font(bold=True)
+
+    # === 1. ABAS GLOBAIS (AGRUPADO POR FILIAL) ===
+
+    def create_global_sheet(title, time_cols, data_key):
+        if title == "Resumo Geral": ws = wb.active; ws.title = title
+        else: ws = wb.create_sheet(title)
+        
+        # MUDANÇA AQUI: "Equipe" vira "Filial"
+        headers = ["Filial"] + (time_cols if time_cols else ["TOTAL (R$)"]) 
+        if time_cols: headers.append("TOTAL")
+        
+        write_header(ws, 1, headers)
+        
+        row = 2
+        for filial in sorted(global_data.keys()):
+            vals = [filial]
+            if not time_cols:
+                vals.append(global_data[filial]['total_periodo'])
+            else:
+                row_total = 0
+                for t in time_cols:
+                    v = global_data[filial][data_key].get(t, 0.0)
+                    vals.append(v)
+                    row_total += v
+                vals.append(row_total)
+            
+            write_row(ws, row, vals, bold_last=True)
+            row += 1
+        
+        auto_adjust_width(ws)
+
+    # Gera as 4 abas globais
+    create_global_sheet("Resumo Geral", [], None)
+    create_global_sheet("Visão Mensal (Global)", sorted_months, 'mensal')
+    create_global_sheet("Visão Semanal (Global)", sorted_weeks, 'semanal')
+    create_global_sheet("Visão Diária (Global)", sorted_days, 'diario')
+
+    # === 2. ABAS POR FILIAL (DETALHADO POR FUNCIONÁRIO E TIPO) ===
+    
+    for filial in sorted(team_data.keys()):
+        # Nome da aba seguro
+        safe_name = filial[:30].replace('/', '-')
+        ws = wb.create_sheet(safe_name)
+        
+        current_row = 1
+        # Título interno
+        ws.cell(row=current_row, column=1, value=f"RELATÓRIO: {filial.upper()}").font = Font(bold=True, size=14)
+        current_row += 2
+
+        def add_complex_table(title, time_periods, data_key):
+            nonlocal current_row
+            ws.cell(row=current_row, column=1, value=title.upper()).font = Font(bold=True, size=12, color="4F81BD")
+            current_row += 1
+            col_idx = 2
+            ws.cell(row=current_row, column=1, value="Colaborador").style = header_style
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row+1, end_column=1)
+            
+            # Linha 1: Períodos
+            for period in time_periods:
+                start_col = col_idx
+                end_col = col_idx + len(sorted_types) - 1 
+                if start_col < end_col:
+                    ws.merge_cells(start_row=current_row, start_column=start_col, end_row=current_row, end_column=end_col)
+                cell = ws.cell(row=current_row, column=start_col, value=period)
+                cell.style = period_header_style
+                cell.border = border
+                col_idx = end_col + 1
+            
+            # Total Geral
+            ws.merge_cells(start_row=current_row, start_column=col_idx, end_row=current_row+1, end_column=col_idx)
+            cell = ws.cell(row=current_row, column=col_idx, value="TOTAL GERAL")
+            cell.style = header_style
+            total_geral_col_idx = col_idx
+            current_row += 1
+            
+            # Linha 2: Tipos
+            col_idx = 2
+            for period in time_periods:
+                for tipo in sorted_types:
+                    cell = ws.cell(row=current_row, column=col_idx, value=tipo)
+                    cell.style = header_style
+                    cell.font = Font(bold=True, size=9, color="FFFFFF")
+                    col_idx += 1
+            current_row += 1
+            
+            # Dados
+            for func in sorted(team_data[filial].keys()):
+                dados_func = team_data[filial][func]
+                ws.cell(row=current_row, column=1, value=func).border = border
+                col_idx = 2
+                func_grand_total = 0
+                for period in time_periods:
+                    period_values = dados_func[data_key].get(period, {})
+                    for tipo in sorted_types:
+                        val = period_values.get(tipo, 0.0)
+                        cell = ws.cell(row=current_row, column=col_idx, value=val)
+                        cell.number_format = money_fmt
+                        cell.border = border
+                        func_grand_total += val
+                        col_idx += 1
+                cell = ws.cell(row=current_row, column=total_geral_col_idx, value=func_grand_total)
+                cell.number_format = money_fmt
+                cell.font = Font(bold=True)
+                cell.border = border
+                current_row += 1
+            current_row += 2
+
+        # 1. Resumo Simples por Tipo
+        ws.cell(row=current_row, column=1, value="RESUMO POR TIPO").font = Font(bold=True, color="4F81BD")
+        current_row += 1
+        headers_tipo = ["Colaborador"] + sorted_types + ["TOTAL"]
+        write_header(ws, current_row, headers_tipo, col_offset=1)
+        current_row += 1
+        for func in sorted(team_data[filial].keys()):
+            vals = [func]
+            tot = 0
+            for t in sorted_types:
+                v = team_data[filial][func]['tipos'].get(t, 0.0)
+                vals.append(v); tot += v
+            vals.append(tot)
+            write_row(ws, current_row, vals, bold_last=True)
+            current_row += 1
+        current_row += 2
+
+        # 2. Tabelas Complexas
+        add_complex_table("Detalhamento Mensal", sorted_months, 'mensal')
+        add_complex_table("Detalhamento Semanal", sorted_weeks, 'semanal')
+        add_complex_table("Detalhamento Diário", sorted_days, 'diario')
+
+        auto_adjust_width(ws)
+
+    # Finaliza
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    nome_arq = f"Relatorio_Filiais_{data_inicio.strftime('%d%m')}_{data_fim.strftime('%d%m')}.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{nome_arq}"'
+    wb.save(response)
+    
+    return response
+
+
+
