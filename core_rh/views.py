@@ -2473,21 +2473,30 @@ def avancar_status_km(request, controle_id):
 def rejeitar_km_gestor(request, controle_id):
     km = get_object_or_404(ControleKM, id=controle_id)
     
-    # MUDANÇA AQUI: Define o status diretamente como 'Pendente'
-    # Assim o técnico já consegue editar/corrigir imediatamente.
+    # DEFINIÇÃO CRÍTICA: O status volta para 'Pendente'
+    # Isso garante que o registro reapareça na lista para ser editado ou aprovado novamente.
     novo_status = 'Pendente'
     
+    # Calcula o intervalo da semana para afetar todos os registros relacionados
     dt = km.data
     ini = dt - timedelta(days=dt.weekday())
     fim = ini + timedelta(days=6)
 
-    # Reverte a semana inteira para Pendente
-    DespesaDiversa.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
-    ControleKM.objects.filter(funcionario=km.funcionario, data__range=[ini, fim]).update(status=novo_status)
+    # ATUALIZAÇÃO EM LOTE (Sem deletar nada)
+    # Atualiza Despesas
+    DespesaDiversa.objects.filter(
+        funcionario=km.funcionario, 
+        data__range=[ini, fim]
+    ).update(status=novo_status)
     
-    messages.warning(request, "Semana devolvida para correção (Status voltou para Pendente).")
+    # Atualiza KMs
+    ControleKM.objects.filter(
+        funcionario=km.funcionario, 
+        data__range=[ini, fim]
+    ).update(status=novo_status)
+    
+    messages.warning(request, "A solicitação foi devolvida para o status 'Pendente'.")
     return redirect('area_gestor')
-
 @login_required
 def excluir_km(request, km_id):
     c = get_object_or_404(ControleKM, id=km_id)

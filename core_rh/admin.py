@@ -198,19 +198,6 @@ class EquipeAdmin(RHAccessMixin, admin.ModelAdmin):
         return ", ".join([g.nome_completo.split()[0] for g in obj.gestores.all()])
     listar_gestores.short_description = "Gestores"
 
-    # --- O PULO DO GATO: Esconde as ocultas da lista principal ---
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        # Se for superuser, mostra tudo (para você poder editar/desocultar se precisar)
-        # Se NÃO for superuser (ou se quiser esconder de todos), descomente a linha abaixo:
-        # return qs.filter(oculta=False) 
-        
-        # Lógica recomendada: Mostra apenas as ativas por padrão, 
-        # mas permite ver as ocultas se usar o filtro lateral (list_filter).
-        # Se você quer que elas SUMAM mesmo da lista inicial:
-        if not request.GET.get('oculta__exact'): # Se não estiver filtrando explicitamente...
-             return qs.filter(oculta=False) # ...mostra só as ativas
-        return qs
 @admin.register(Cargo)
 class CargoAdmin(RHAccessMixin, admin.ModelAdmin):
     pass

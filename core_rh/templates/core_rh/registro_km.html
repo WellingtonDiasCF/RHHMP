@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel do Técnico | Portal RH</title>
+    <title>Registro de Despesas | Portal RH</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -22,10 +22,61 @@
         .nav-tabs .nav-link.active { color: #FF6600; background-color: #fff; border-bottom: 3px solid #FF6600; }
         .nav-tabs .nav-link:hover { color: #333; }
 
+        /* --- WEEK NAVIGATOR (Novo Estilo) --- */
+        .week-navigator {
+            display: flex;
+            align-items: center;
+            background-color: #f8f9fa;
+            border: 1px solid #e2e8f0;
+            border-radius: 50px;
+            padding: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .btn-nav-week {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid transparent;
+            background-color: #fff;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-nav-week:hover {
+            background-color: #FF6600;
+            color: #fff;
+            border-color: #FF6600;
+        }
+
+        .week-display {
+            padding: 0 15px;
+            text-align: center;
+            min-width: 160px;
+        }
+        .week-display .label { font-size: 0.7rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px; }
+        .week-display .range { font-size: 0.85rem; color: #334155; font-weight: 700; }
+
+        .btn-reset-filter {
+            font-size: 0.75rem;
+            text-decoration: none;
+            margin-left: 10px;
+            color: #FF6600;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid #FF6600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: #fff;
+        }
+        .btn-reset-filter:hover { background-color: #FF6600; color: #fff; }
+
         /* --- CARDS & FORMS --- */
         .header-box { background: #fff; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
         
-        /* Ajuste no Card de Registro para ficar mais bonito */
         .card-registro { 
             border: 1px solid #eef2f6; 
             border-radius: 16px; 
@@ -82,7 +133,7 @@
         
         <div class="header-box">
             <div>
-                <h3 class="fw-bold text-dark mb-1">Painel do Técnico</h3>
+                <h3 class="fw-bold text-dark mb-1">Registro de Despesas</h3>
                 <p class="text-muted small mb-0">Gerencie seus lançamentos e mantenha seus dados atualizados.</p>
             </div>
             <div class="d-flex gap-2">
@@ -154,7 +205,7 @@
                                         <span class="input-group-text bg-light border-end-0 text-muted"><i class="fab fa-google"></i></span>
                                         <input type="text" name="google_url" class="form-control border-start-0" style="background-color: #f8f9fa;" placeholder="Cole aqui o link completo da rota..." required autocomplete="off">
                                     </div>
-                                    <div class="form-text small">Cole o link da rota apenas para conferência (opcional, mas recomendado).</div>
+                                    <div class="form-text small">Cole o link da rota para conferência (obrigatório).</div>
                                 </div>
                             </div>
 
@@ -169,10 +220,41 @@
 
                 <div class="card card-custom border-0 shadow-sm">
                     <div class="card-header bg-white py-3 border-bottom">
-                        <h6 class="fw-bold text-dark mb-0">Histórico de Lançamentos</h6>
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                            
+                            <div class="d-flex align-items-center">
+                                <h6 class="fw-bold text-dark mb-0 me-3">
+                                    <i class="fas fa-calendar-alt me-2 text-primary"></i>Histórico
+                                </h6>
+                                <span class="badge bg-light text-dark border" id="countBadge">{{ historico|length }} itens</span>
+                            </div>
+                            
+                            <div class="d-flex align-items-center">
+                                <div class="week-navigator">
+                                    <button type="button" class="btn-nav-week" onclick="changeWeek(-1)" title="Semana Anterior">
+                                        <i class="fas fa-chevron-left"></i>
+                                    </button>
+                                    
+                                    <div class="week-display">
+                                        <span class="label">Filtro Semanal</span>
+                                        <span class="range" id="weekRangeText">Carregando...</span>
+                                    </div>
+
+                                    <button type="button" class="btn-nav-week" onclick="changeWeek(1)" title="Próxima Semana">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                                
+                                <span class="btn-reset-filter" onclick="resetFilter()" id="btnResetFilter" style="display: none;">
+                                    Ver Tudo
+                                </span>
+                            </div>
+
+                        </div>
                     </div>
+                    
                     <div class="table-responsive">
-                        <table class="table table-custom table-hover mb-0">
+                        <table class="table table-custom table-hover mb-0" id="historyTable">
                             <thead>
                                 <tr>
                                     <th class="ps-4">Data</th>
@@ -183,9 +265,9 @@
                                     <th class="text-end pe-4">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="historyBody">
                                 {% for item in historico %}
-                                <tr>
+                                <tr data-date="{{ item.data|date:'Y-m-d' }}">
                                     <td class="ps-4"><span class="fw-bold text-dark">{{ item.data|date:"d/m/Y" }}</span></td>
                                     <td><span class="badge bg-light text-dark border">{{ item.numero_chamado|default:"-" }}</span></td>
                                     <td>
@@ -273,8 +355,9 @@
                                     </td>
                                 </tr>
                                 {% empty %}
-                                <tr><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum lançamento encontrado</h6></td></tr>
+                                <tr id="no-data-row"><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum lançamento encontrado</h6></td></tr>
                                 {% endfor %}
+                                <tr id="filter-no-results" style="display: none;"><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum registro nesta semana</h6></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -351,6 +434,14 @@
                                 <div class="col-md-4">
                                     <label class="fw-bold small mb-1">Conta</label>
                                     <input type="text" name="conta" class="form-control form-control-custom" value="{{ funcionario.conta|default:'' }}">
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-12">
+                                    <label class="fw-bold small mb-1 text-primary"><i class="fas fa-qrcode me-1"></i> Chave PIX</label>
+                                    <input type="text" name="chave_pix" class="form-control form-control-custom border-primary" value="{{ funcionario.chave_pix|default:'' }}" placeholder="CPF, Email, Telefone ou Aleatória">
+                                    <div class="form-text small">Chave preferencial para recebimento ágil.</div>
                                 </div>
                             </div>
 
@@ -472,6 +563,117 @@
             document.getElementById('input_km_id_repetir').value = id;
             var myModal = new bootstrap.Modal(document.getElementById('modalRepetirRota'));
             myModal.show();
+        }
+
+        // --- LÓGICA DE NAVEGAÇÃO DE SEMANAS (SEGUNDA A DOMINGO) ---
+        
+        let currentMonday = null; // Data de referência (Sempre uma Segunda-feira)
+        let isFilterActive = true; // Começa ativado na semana atual
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicializa na Segunda-feira da semana atual
+            currentMonday = getMonday(new Date());
+            updateWeekDisplay();
+        });
+
+        // Função Auxiliar: Pega a Segunda-feira de uma data qualquer
+        function getMonday(d) {
+            d = new Date(d);
+            var day = d.getDay(),
+                diff = d.getDate() - day + (day == 0 ? -6 : 1); // Se for Domingo (0), volta 6 dias, senão volta (day-1)
+            return new Date(d.setDate(diff));
+        }
+
+        // Navegação (+1 ou -1 semana)
+        function changeWeek(direction) {
+            isFilterActive = true;
+            // Adiciona ou subtrai 7 dias
+            currentMonday.setDate(currentMonday.getDate() + (direction * 7));
+            updateWeekDisplay();
+        }
+
+        // Reseta para mostrar tudo
+        function resetFilter() {
+            isFilterActive = false;
+            updateWeekDisplay();
+        }
+
+        // Atualiza Visual e Aplica Filtro
+        function updateWeekDisplay() {
+            const rangeText = document.getElementById('weekRangeText');
+            const resetBtn = document.getElementById('btnResetFilter');
+            
+            // Calcula Domingo (Final da semana)
+            const currentSunday = new Date(currentMonday);
+            currentSunday.setDate(currentMonday.getDate() + 6);
+            // Ajusta hora para final do dia para comparação correta
+            currentSunday.setHours(23, 59, 59, 999);
+            
+            // Ajusta hora da segunda para inicio do dia
+            currentMonday.setHours(0, 0, 0, 0);
+
+            if (isFilterActive) {
+                // Formata data: DD/MM
+                const startStr = currentMonday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                const endStr = currentSunday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                
+                rangeText.innerText = `${startStr} - ${endStr}`;
+                resetBtn.style.display = 'inline-block';
+                
+                applyFilter(currentMonday, currentSunday);
+            } else {
+                rangeText.innerText = "Todo o Período";
+                resetBtn.style.display = 'none';
+                showAllRows();
+            }
+        }
+
+        // Lógica de Filtragem da Tabela
+        function applyFilter(startDate, endDate) {
+            const rows = document.querySelectorAll('#historyBody tr[data-date]');
+            const noResultsRow = document.getElementById('filter-no-results');
+            const noDataRow = document.getElementById('no-data-row'); // Mensagem original "Nenhum lançamento"
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                // Converte string 'YYYY-MM-DD' para Date local (hack seguro para evitar UTC shift)
+                const parts = row.getAttribute('data-date').split('-');
+                const rowDate = new Date(parts[0], parts[1]-1, parts[2], 12, 0, 0); // Meio dia para evitar borda
+                
+                if (rowDate >= startDate && rowDate <= endDate) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Atualiza badge de contagem
+            document.getElementById('countBadge').innerText = visibleCount + ' visíveis';
+
+            // Gerencia mensagens de "Vazio"
+            if (noDataRow) noDataRow.style.display = 'none'; 
+            
+            if (noResultsRow) {
+                // Se filtro está ativo, não achou nada, e existem linhas no total
+                if (visibleCount === 0 && rows.length > 0) {
+                    noResultsRow.style.display = '';
+                    // Atualiza texto para feedback melhor
+                    noResultsRow.querySelector('h6').innerText = "Nenhum registro nesta semana (" + 
+                        startDate.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ")";
+                } else {
+                    noResultsRow.style.display = 'none';
+                }
+            }
+        }
+
+        function showAllRows() {
+            const rows = document.querySelectorAll('#historyBody tr[data-date]');
+            const noResultsRow = document.getElementById('filter-no-results');
+            
+            rows.forEach(row => row.style.display = '');
+            document.getElementById('countBadge').innerText = rows.length + ' itens';
+            if (noResultsRow) noResultsRow.style.display = 'none';
         }
     </script>
 </body>
