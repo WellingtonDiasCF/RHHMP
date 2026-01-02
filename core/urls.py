@@ -2,41 +2,35 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.generic import RedirectView
+from django.views.generic import RedirectView, TemplateView # Adicionado TemplateView
 from django.contrib.auth import views as auth_views
 
 # Importação das nossas Views Personalizadas de Senha
 from core_rh.views import CustomPasswordResetView, CustomPasswordResetDoneView
 
 urlpatterns = [
-    # 1. REDIRECIONAMENTO (O Pulo do Gato)
-    # Ao acessar o domínio raiz ou /admin/, vai para a lista de equipes
+    # --- ROTAS PWA (Adicionado) ---
+    # O Android procura estes ficheiros na raiz
+    path('manifest.json', TemplateView.as_view(template_name='manifest.json', content_type='application/manifest+json'), name='manifest'),
+    path('service-worker.js', TemplateView.as_view(template_name='service-worker.js', content_type='application/javascript'), name='service-worker'),
+    path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
+
+    # 1. REDIRECIONAMENTO
     re_path(r'^admin/$', RedirectView.as_view(url='/admin/core_rh/equipe/', permanent=False)),
 
     # 2. ADMIN DO DJANGO
     path('admin/', admin.site.urls),
 
-    # 3. SEU APP RH (Rotas principais)
+    # 3. SEU APP RH
     path('', include('core_rh.urls')),
 
-    # 4. RECUPERAÇÃO DE SENHA CUSTOMIZADA (CPF)
-    # Estas rotas DEVEM vir antes do include('django.contrib.auth.urls')
-    
-    # Passo 1: Digitar o CPF
-    path('accounts/password_reset/', 
-         CustomPasswordResetView.as_view(), 
-         name='password_reset'),
+    # 4. RECUPERAÇÃO DE SENHA
+    path('accounts/password_reset/', CustomPasswordResetView.as_view(), name='password_reset'),
+    path('accounts/password_reset/done/', CustomPasswordResetDoneView.as_view(), name='password_reset_done'),
 
-    # Passo 2: Mensagem de E-mail Enviado (com máscara no e-mail)
-    path('accounts/password_reset/done/', 
-         CustomPasswordResetDoneView.as_view(), 
-         name='password_reset_done'),
-
-    # 5. ROTAS DE AUTENTICAÇÃO PADRÃO DO DJANGO
-    # (Login, Logout, Confirmar nova senha, Sucesso)
+    # 5. ROTAS DE AUTENTICAÇÃO
     path('accounts/', include('django.contrib.auth.urls')),
 ]
 
-# Configuração para servir arquivos de mídia (Uploads) em modo DEBUG
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
