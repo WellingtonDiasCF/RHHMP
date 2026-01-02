@@ -123,6 +123,14 @@
             background-color: transparent !important;
             border-color: rgba(0,0,0,0.1);
         }
+        
+        /* MUDANÇA: Exceção para o input de Observação ser visível/editável nesses dias */
+        .row-feriado input.input-obs, 
+        .row-atestado-dias input.input-obs, 
+        .row-ferias input.input-obs {
+            background-color: #fff !important;
+            border: 1px solid #ced4da !important;
+        }
 
         /* Badges */
         .badge-feriado { background: #198754; color: white; }
@@ -130,7 +138,7 @@
         .badge-atestado-horas { background: #757e02ff; color: white; }
         .badge-ferias { background: #0dcaf0; color: black; } /* AZUL */
 
-        /* Obs Colors */
+        /* Obs Colors (Texto) */
         .obs-feriado { color: #198754 !important; font-weight: bold; }
         .obs-atestado-dias { color: #ff0000ff !important; font-weight: bold; font-style: italic; }
         .obs-atestado-horas { color: #757e02ff !important; font-weight: bold; }
@@ -320,11 +328,11 @@
                                         <input type="text" name="observacoes_{{ dia.data.day }}" 
                                                value="{{ dia.obs_visual }}" 
                                                class="form-control input-obs 
-                                               {% if dia.eh_ferias %}bg-transparent border-0 obs-ferias
-                                               {% elif dia.tipo_atestado == 'DIAS' %}bg-transparent border-0 obs-atestado-dias
-                                               {% elif dia.tipo_atestado == 'HORAS' %}bg-transparent border-0 obs-atestado-horas
-                                               {% elif dia.eh_feriado %}bg-transparent border-0 obs-feriado{% endif %}"
-                                               {% if is_locked or dia.eh_ferias or dia.tipo_atestado == 'DIAS' or dia.eh_feriado %}readonly{% endif %}
+                                               {% if dia.eh_ferias %}obs-ferias
+                                               {% elif dia.tipo_atestado == 'DIAS' %}obs-atestado-dias
+                                               {% elif dia.tipo_atestado == 'HORAS' %}obs-atestado-horas
+                                               {% elif dia.eh_feriado %}obs-feriado{% endif %}"
+                                               {% if is_locked %}readonly{% endif %}
                                                placeholder="Obs...">
                                     </td>
                                 </tr>
