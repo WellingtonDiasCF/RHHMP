@@ -12,11 +12,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 import dj_database_url
+from decouple import config, Csv
 
 DEBUG = 'RENDER' not in os.environ
 
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=Csv())
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,10 +27,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 
-SECRET_KEY = 'django-insecure-k&d_iovd^h4cds-2$rsa8o*&494%k0!fp43w1825hr&oj937!3'
+SECRET_KEY = config('SECRET_KEY')
 
 
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 
 
@@ -236,15 +237,15 @@ LOGIN_REDIRECT_URL = 'home'
 
 LOGOUT_REDIRECT_URL = 'login'
 
-# Aponta para a classe que acabamos de criar
-EMAIL_BACKEND = 'core_rh.email_backend.EmailBackendSemVerificacao'
+EMAIL_BACKEND = 'core_rh.email_backend.EmailBackendSemVerificacao' # Seu backend personalizado
 EMAIL_HOST = 'mail.dividata360.com.br'
 EMAIL_PORT = 465
-EMAIL_USE_SSL = True  # Porta 465 usa SSL implícito
-EMAIL_USE_TLS = False # Não use TLS junto com SSL na 465
-EMAIL_HOST_USER = 'devteam@dividata360.com.br'
-EMAIL_HOST_PASSWORD = 'ddZA@!=#$'
-DEFAULT_FROM_EMAIL = 'Equipe Dividata <devteam@dividata360.com.br>'
+EMAIL_USE_SSL = True
+EMAIL_USE_TLS = False
+# AQUI ESTÁ A MUDANÇA:
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'Portal RH <devteam@dividata360.com.br>'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
