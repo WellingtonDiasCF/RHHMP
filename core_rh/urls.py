@@ -58,7 +58,6 @@ urlpatterns = [
     # ...
     path('api/admin/atestados-partial/', views.admin_atestados_partial_view, name='admin_atestados_partial'),
     path('rh/atestado/acao/', views.rh_acao_atestado, name='rh_acao_atestado'),
-
     # --- REGISTRO DE KM ---
     path('km/', views.registro_km_view, name='registro_km'),
     path('km/excluir/<int:km_id>/', views.excluir_km, name='excluir_km'),

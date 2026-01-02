@@ -583,49 +583,6 @@ def folha_ponto_view(request):
     
     return render(request, 'core_rh/folha_ponto.html', context)
 
-def mascarar_email(email):
-    if not email or '@' not in email: return email
-    try:
-        user_part, domain_part = email.split('@')
-        if len(user_part) > 2:
-            masked_user = user_part[0] + "*" * (len(user_part) - 2) + user_part[-1]
-            if len(masked_user) > 10: masked_user = user_part[0] + "*****" + user_part[-1]
-        else:
-            masked_user = user_part
-        return f"{masked_user}@{domain_part}"
-    except: return email
-
-class CustomPasswordResetView(PasswordResetView):
-    form_class = CpfPasswordResetForm 
-    template_name = 'registration/password_reset_form.html'
-    success_url = reverse_lazy('password_reset_done')
-
-    def form_valid(self, form):
-        cpf = form.cleaned_data['cpf']
-        try:
-            user = User.objects.get(username=cpf)
-        except User.DoesNotExist:
-             return super().form_valid(form)
-        
-        if user.email:
-            reset_form = PasswordResetForm(data={'email': user.email})
-            if reset_form.is_valid():
-                reset_form.save(
-                    request=self.request,
-                    use_https=self.request.is_secure(),
-                    email_template_name='registration/password_reset_email.html',
-                    subject_template_name='registration/password_reset_subject.txt'
-                )
-                self.request.session['reset_email_masked'] = mascarar_email(user.email)
-                return redirect(self.success_url)
-        return super().form_valid(form)
-
-class CustomPasswordResetDoneView(PasswordResetView):
-    template_name = 'registration/password_reset_done.html'
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['masked_email'] = self.request.session.get('reset_email_masked', '')
-        return context
 
 # --- SUBSTITUA A FUNÇÃO area_gestor_view INTEIRA POR ESTA ---
 @login_required
@@ -3248,4 +3205,34 @@ def gerar_relatorio_customizado(request):
     return response
 
 
+class CustomPasswordResetView(PasswordResetView):
+    form_class = CpfPasswordResetForm
+    template_name = 'registration/password_reset_form.html'
+    
+    # Adicione estas duas linhas:
+    email_template_name = 'registration/password_reset_email.html' # Versão Texto
+    html_email_template_name = 'registration/password_reset_email_html.html' # Versão HTML (O Bonito)
+    
+    success_url = reverse_lazy('password_reset_done')
 
+    def form_valid(self, form):
+        email = form.cleaned_data.get('email')
+        if email:
+            self.request.session['reset_email'] = email
+        return super().form_valid(form)
+class CustomPasswordResetDoneView(PasswordResetDoneView):
+    template_name = 'registration/password_reset_done.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # RECUPERA O E-MAIL DA SESSÃO E MASCARA
+        email = self.request.session.get('reset_email')
+        if email:
+            try:
+                user_part, domain_part = email.split('@')
+                visible = user_part[:3]
+                masked_email = f"{visible}***@{domain_part}"
+                context['masked_email'] = masked_email
+            except ValueError:
+                context['masked_email'] = email
+        return context

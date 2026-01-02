@@ -236,8 +236,15 @@ LOGIN_REDIRECT_URL = 'home'
 
 LOGOUT_REDIRECT_URL = 'login'
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-PASSWORD_RESET_TIMEOUT = 1800
+# Aponta para a classe que acabamos de criar
+EMAIL_BACKEND = 'core_rh.email_backend.EmailBackendSemVerificacao'
+EMAIL_HOST = 'mail.dividata360.com.br'
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True  # Porta 465 usa SSL implícito
+EMAIL_USE_TLS = False # Não use TLS junto com SSL na 465
+EMAIL_HOST_USER = 'devteam@dividata360.com.br'
+EMAIL_HOST_PASSWORD = 'ddZA@!=#$'
+DEFAULT_FROM_EMAIL = 'Equipe Dividata <devteam@dividata360.com.br>'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
