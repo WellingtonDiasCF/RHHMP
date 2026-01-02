@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "br.com.dividata360.portalrh.twa",
+    "sha256_cert_fingerprints": [
+      "E9:EB:0E:AE:08:AC:B3:22:40:FD:D7:EE:60:EB:50:AD:93:90:64:D3:7A:3A:0A:B9:57:D7:F4:81:63:C9:69:27"
+    ]
+  }
+}]

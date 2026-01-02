@@ -14,7 +14,7 @@ urlpatterns = [
     path('manifest.json', TemplateView.as_view(template_name='manifest.json', content_type='application/manifest+json'), name='manifest'),
     path('service-worker.js', TemplateView.as_view(template_name='service-worker.js', content_type='application/javascript'), name='service-worker'),
     path('offline/', TemplateView.as_view(template_name='offline.html'), name='offline'),
-
+    path('.well-known/assetlinks.json', TemplateView.as_view(template_name='assetlinks.json', content_type='application/json'), name='assetlinks'),
     # 1. REDIRECIONAMENTO
     re_path(r'^admin/$', RedirectView.as_view(url='/admin/core_rh/equipe/', permanent=False)),
 
