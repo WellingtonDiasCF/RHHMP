@@ -1,6 +1,6 @@
 {% load static %}
 // MUDANÇA AQUI: Alterei para v2 para forçar a atualização do cache nos celulares
-const CACHE_NAME = 'rh-dividata-v3';
+const CACHE_NAME = 'rh-dividata-v4';
 const OFFLINE_URL = '/offline/';
 const LOGO_URL = "{% static 'images/icon.svg' %}";
 
