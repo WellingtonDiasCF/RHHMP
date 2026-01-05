@@ -7,11 +7,16 @@
     <meta name="color-scheme" content="light">
     <title>Portal RH | Início</title>
     
-    <script>
+<script>
         document.documentElement.setAttribute('data-bs-theme', 'light');
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            // Se o sistema for dark, forçamos o navegador a ignorar
-            document.documentElement.style.colorScheme = 'light';
+        if (window.matchMedia) {
+            // Tenta sobrescrever a preferência do sistema
+            try {
+                var meta = document.createElement('meta');
+                meta.name = "color-scheme";
+                meta.content = "light";
+                document.getElementsByTagName('head')[0].appendChild(meta);
+            } catch(e) {}
         }
     </script>
     
@@ -27,7 +32,8 @@
             color-scheme: light;
         }
         body {
-            background-color: #f4f7f6 !important;;
+            background-color: #f4f7f6 !important;
+            background-image: linear-gradient(to bottom, #f4f7f6, #f8f9fa) !important;
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
             display: flex;

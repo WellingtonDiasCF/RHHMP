@@ -7,11 +7,16 @@
     <meta name="color-scheme" content="light">
     <title>Histórico - {{ funcionario.nome_completo }}</title>
     
-    <script>
+<script>
         document.documentElement.setAttribute('data-bs-theme', 'light');
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            // Se o sistema for dark, forçamos o navegador a ignorar
-            document.documentElement.style.colorScheme = 'light';
+        if (window.matchMedia) {
+            // Tenta sobrescrever a preferência do sistema
+            try {
+                var meta = document.createElement('meta');
+                meta.name = "color-scheme";
+                meta.content = "light";
+                document.getElementsByTagName('head')[0].appendChild(meta);
+            } catch(e) {}
         }
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
