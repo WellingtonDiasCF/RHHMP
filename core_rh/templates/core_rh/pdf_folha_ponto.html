@@ -6,6 +6,14 @@
 <head>
     <meta charset="utf-8">
     <title>Folha de Ponto</title>
+    
+    <script>
+        document.documentElement.setAttribute('data-bs-theme', 'light');
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // Se o sistema for dark, forçamos o navegador a ignorar
+            document.documentElement.style.colorScheme = 'light';
+        }
+    </script>
     <style>
         :root {
             color-scheme: light;

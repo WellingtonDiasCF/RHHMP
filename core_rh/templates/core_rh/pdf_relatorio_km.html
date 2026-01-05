@@ -3,6 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Relatório de Despesas</title>
+    
+    <script>
+        document.documentElement.setAttribute('data-bs-theme', 'light');
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            // Se o sistema for dark, forçamos o navegador a ignorar
+            document.documentElement.style.colorScheme = 'light';
+        }
+    </script>
     <style>
         :root {
             color-scheme: light;
