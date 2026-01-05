@@ -150,7 +150,7 @@
     
     <link rel="manifest" href="{% url 'manifest' %}">
     <meta name="theme-color" content="#FF6600">
-    <link rel="apple-touch-icon" href="{% static 'images/dividata-logo.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/icon.svg' %}">
     
     <script>
       if ('serviceWorker' in navigator) {
@@ -164,6 +164,9 @@
     </script>
     
     {% block extrahead %}{% endblock %}
+<link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
+    <link rel="apple-touch-icon" href="{% static 'images/icon.svg' %}">
+    <meta name="theme-color" content="#FF6600">
 </head>
 <body>
 
