@@ -1,7 +1,7 @@
 {% load static %}
 {
-  "name": "Portal RH Dividata",
-  "short_name": "RH Dividata",
+  "name": "Portal DIVIDATA",
+  "short_name": "Dividata",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F8F9FA",

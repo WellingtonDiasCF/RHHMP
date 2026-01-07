@@ -157,9 +157,9 @@ STATICFILES_DIRS = [
 
 
 JAZZMIN_SETTINGS = {
-    "site_title": "RH Dividata",
-    "site_header": "RH Dividata",
-    "site_brand": "RH Dividata",
+    "site_title": "Dividata",
+    "site_header": "Dividata",
+    "site_brand": "Dividata",
     "site_logo": None,
     "login_logo": None,
     "welcome_sign": "Administração",
@@ -245,7 +245,7 @@ EMAIL_USE_TLS = False
 # AQUI ESTÁ A MUDANÇA:
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = 'Portal RH <devteam@dividata360.com.br>'
+DEFAULT_FROM_EMAIL = 'Portal DIVIDATA <devteam@dividata360.com.br>'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 

@@ -157,9 +157,9 @@ STATICFILES_DIRS = [
 
 
 JAZZMIN_SETTINGS = {
-    "site_title": "RH Dividata",
-    "site_header": "RH Dividata",
-    "site_brand": "RH Dividata",
+    "site_title": "Dividata",
+    "site_header": "Dividata",
+    "site_brand": "Dividata",
     "site_logo": None,
     "login_logo": None,
     "welcome_sign": "Administração",

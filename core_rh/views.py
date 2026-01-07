@@ -408,9 +408,9 @@ def gerar_pdf_ponto_view(request):
 
     logo_data = None
     possiveis_caminhos = [
-        os.path.join(settings.BASE_DIR, 'core', 'static', 'images', 'icon.svg'),
-        os.path.join(settings.BASE_DIR, 'staticfiles', 'images', 'icon.svg'),
-        os.path.join(settings.BASE_DIR, 'static', 'images', 'icon.svg')
+        os.path.join(settings.BASE_DIR, 'core', 'static', 'images', 'Logo.png'),
+        os.path.join(settings.BASE_DIR, 'staticfiles', 'images', 'Logo.png'),
+        os.path.join(settings.BASE_DIR, 'static', 'images', 'Logo.png')
     ]
     for path in possiveis_caminhos:
         if os.path.exists(path):
