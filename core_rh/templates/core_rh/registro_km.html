@@ -7,7 +7,7 @@
     <meta name="color-scheme" content="light">
     <title>Registro de Despesas | Portal DIVIDATA</title>
     
-<script>
+    <script>
         document.documentElement.setAttribute('data-bs-theme', 'light');
         if (window.matchMedia) {
             try {
@@ -57,10 +57,6 @@
         .badge-soft-warning { background-color: #fef3c7; color: #b45309; }
         .badge-soft-danger  { background-color: #fee2e2; color: #b91c1c; }
         .badge-soft-secondary { background-color: #f1f5f9; color: #475569; }
-        .badge-pill { padding: 0.5em 1em; border-radius: 50rem; font-weight: 600; font-size: 0.85rem; }
-        
-        .route-line { display: flex; align-items: center; margin-bottom: 4px; }
-        .route-icon { width: 20px; text-align: center; margin-right: 8px; }
     </style>
     <link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
 </head>
@@ -302,17 +298,24 @@
                             {% csrf_token %}
                             <h6 class="text-secondary fw-bold small text-uppercase mb-3 mt-2 border-bottom pb-2">Endereço</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-3"><label class="small fw-bold">CEP</label><input type="text" name="cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}"></div>
-                                <div class="col-md-5"><label class="small fw-bold">Endereço</label><input type="text" name="endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}"></div>
-                                <div class="col-md-4"><label class="small fw-bold">Bairro</label><input type="text" name="bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}"></div>
-                                <div class="col-md-8"><label class="small fw-bold">Cidade</label><input type="text" name="cidade" class="form-control form-control-custom" value="{{ funcionario.cidade|default:'' }}"></div>
-                                <div class="col-md-4"><label class="small fw-bold">Estado</label><input type="text" name="estado" class="form-control form-control-custom" value="{{ funcionario.estado|default:'' }}"></div>
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">CEP</label>
+                                    <input type="text" name="cep" id="id_cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}" maxlength="9" placeholder="00000-000">
+                                </div>
+                                <div class="col-md-5"><label class="small fw-bold">Endereço</label><input type="text" name="endereco" id="id_endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}"></div>
+                                <div class="col-md-4"><label class="small fw-bold">Bairro</label><input type="text" name="bairro" id="id_bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}"></div>
+                                <div class="col-md-8"><label class="small fw-bold">Cidade</label><input type="text" name="cidade" id="id_cidade" class="form-control form-control-custom" value="{{ funcionario.cidade|default:'' }}"></div>
+                                <div class="col-md-4"><label class="small fw-bold">Estado</label><input type="text" name="estado" id="id_estado" class="form-control form-control-custom" value="{{ funcionario.estado|default:'' }}"></div>
                             </div>
 
                             <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Operacional</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-6"><label class="small fw-bold">Base</label><input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}"></div>
-                                <div class="col-md-6"><label class="small fw-bold">Veículo</label><input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}"></div>
+                                <div class="col-md-5"><label class="small fw-bold">Base</label><input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}"></div>
+                                <div class="col-md-4"><label class="small fw-bold">Veículo</label><input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}"></div>
+                                <div class="col-md-3">
+                                    <label class="small fw-bold text-success">Valor do KM</label>
+                                    <input type="text" name="valor_km" class="form-control form-control-custom border-success" value="{{ funcionario.valor_km|default:'0.00' }}" placeholder="R$ 0,00">
+                                </div>
                             </div>
 
                             <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Pagamento</h6>
@@ -540,13 +543,67 @@
             new bootstrap.Modal(document.getElementById('modalEditarKM')).show();
         }
 
-        // --- NAVEGAÇÃO DE SEMANAS (SCRIPT MANTIDO DO SEU CÓDIGO) ---
+        // --- NAVEGAÇÃO DE SEMANAS ---
         let currentMonday = null;
         let isFilterActive = true;
 
         document.addEventListener('DOMContentLoaded', function() {
             currentMonday = getMonday(new Date());
             updateWeekDisplay();
+            
+            // --- SCRIPT DO CEP (BASEADO NO cep_admin.js DO ADMIN) ---
+            
+            // Mapeamento dos IDs gerados pelo Django Admin (compatível com os IDs do template)
+            const cepInput = document.getElementById('id_cep');
+            const ruaInput = document.getElementById('id_endereco');
+            const bairroInput = document.getElementById('id_bairro');
+            const cidadeInput = document.getElementById('id_cidade');
+            const estadoInput = document.getElementById('id_estado');
+            const localTrabalhoInput = document.getElementById('id_local_trabalho_estado'); // Não existe neste template, mas mantido para compatibilidade
+
+            // Mapeamento de Sigla para Nome Completo
+            const estadosNomes = {
+                'AC': 'Acre', 'AL': 'Alagoas', 'AP': 'Amapá', 'AM': 'Amazonas', 'BA': 'Bahia',
+                'CE': 'Ceará', 'DF': 'Distrito Federal', 'ES': 'Espírito Santo', 'GO': 'Goiás',
+                'MA': 'Maranhão', 'MT': 'Mato Grosso', 'MS': 'Mato Grosso do Sul', 'MG': 'Minas Gerais',
+                'PA': 'Pará', 'PB': 'Paraíba', 'PR': 'Paraná', 'PE': 'Pernambuco', 'PI': 'Piauí',
+                'RJ': 'Rio de Janeiro', 'RN': 'Rio Grande do Norte', 'RS': 'Rio Grande do Sul',
+                'RO': 'Rondônia', 'RR': 'Roraima', 'SC': 'Santa Catarina', 'SP': 'São Paulo',
+                'SE': 'Sergipe', 'TO': 'Tocantins'
+            };
+
+            if (cepInput) {
+                cepInput.addEventListener('blur', function() {
+                    // Remove tudo que não é número
+                    let cep = this.value.replace(/\D/g, '');
+
+                    if (cep.length === 8) {
+                        // Consulta a API ViaCEP
+                        fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (!data.erro) {
+                                    // Preenche os campos de endereço
+                                    if(ruaInput) ruaInput.value = data.logradouro;
+                                    if(bairroInput) bairroInput.value = data.bairro;
+                                    if(cidadeInput) cidadeInput.value = data.localidade;
+                                    if(estadoInput) estadoInput.value = data.uf;
+
+                                    // Define o Local de Trabalho com o nome do Estado (Se o campo existir)
+                                    if(localTrabalhoInput) {
+                                        const nomeCompleto = estadosNomes[data.uf] || data.uf;
+                                        localTrabalhoInput.value = nomeCompleto;
+                                    }
+                                } else {
+                                    alert("CEP não encontrado.");
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro na busca:', error);
+                            });
+                    }
+                });
+            }
         });
 
         function getMonday(d) {
