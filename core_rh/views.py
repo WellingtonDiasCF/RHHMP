@@ -2457,59 +2457,80 @@ def registro_km_view(request):
     funcionario = request.user.funcionario
 
     if request.method == 'POST':
-        google_url = request.POST.get('google_url')
-        data_str = request.POST.get('data_viagem')
-        chamado = request.POST.get('numero_chamado')
-        nome_origem_input = request.POST.get('nome_origem')
-        nome_destino_input = request.POST.get('nome_destino')
-        km_manual_str = request.POST.get('km_manual')
-
-        data_final = timezone.now().date()
-        if data_str:
-            try: data_final = datetime.strptime(data_str, '%Y-%m-%d').date()
-            except: pass
+        # Pega listas de dados (nomes dos inputs agora têm [])
+        datas = request.POST.getlist('data_viagem[]')
+        chamados = request.POST.getlist('numero_chamado[]')
+        origens = request.POST.getlist('nome_origem[]')
+        destinos = request.POST.getlist('nome_destino[]')
+        kms_lista = request.POST.getlist('km_manual[]')
+        urls = request.POST.getlist('google_url[]')
         
-        # --- TRAVA DE SEGURANÇA ---
-        if is_periodo_travado(funcionario, data_final):
-            messages.error(request, "ERRO: Esta semana já foi fechada/aprovada pelo gestor. Não é possível adicionar registros.")
-            return redirect('registro_km')
-        # --------------------------
-
-        km_final = 0.0
-        if km_manual_str:
-            try: km_final = float(km_manual_str.replace(',', '.'))
-            except: km_final = 0.0
-
-        if km_final > 0:
+        saved_count = 0
+        
+        for i in range(len(datas)):
             try:
-                with transaction.atomic():
-                    controle = ControleKM.objects.create(
-                    funcionario=funcionario, data=data_final, total_km=km_final, 
-                    numero_chamado=chamado, status='Pendente'
-                )
-                TrechoKM.objects.create(
-                    controle=controle, 
-                    origem=google_url if google_url else "-", 
-                    destino='-', km=km_final,
-                    nome_origem=nome_origem_input, nome_destino=nome_destino_input
-                )
-                messages.success(request, f"Rota de {km_final} km registrada!")
+                # Validação básica
+                if not datas[i] or not kms_lista[i]:
+                    continue
+
+                data_final = datetime.strptime(datas[i], '%Y-%m-%d').date()
+                
+                # --- TRAVA DE SEGURANÇA ---
+                if is_periodo_travado(funcionario, data_final):
+                    messages.error(request, f"ERRO: Data {datas[i]} pertence a uma semana já fechada. Item ignorado.")
+                    continue
+                # --------------------------
+
+                km_final = float(kms_lista[i].replace(',', '.'))
+                
+                if km_final > 0:
+                    with transaction.atomic():
+                        controle = ControleKM.objects.create(
+                            funcionario=funcionario, 
+                            data=data_final, 
+                            total_km=km_final, 
+                            numero_chamado=chamados[i], 
+                            status='Pendente'
+                        )
+                        TrechoKM.objects.create(
+                            controle=controle, 
+                            origem=urls[i] if urls[i] else "-", 
+                            destino='-', 
+                            km=km_final,
+                            nome_origem=origens[i], 
+                            nome_destino=destinos[i]
+                        )
+                    saved_count += 1
             except Exception as e:
-                messages.error(request, f"Erro: {e}")
+                print(f"Erro ao salvar item {i}: {e}")
+                continue
+
+        if saved_count > 0:
+            messages.success(request, f"{saved_count} rotas registradas com sucesso!")
         else:
-            messages.error(request, "Informe a quilometragem válida.")
+            if not messages.get_messages(request):
+                messages.warning(request, "Nenhum dado válido para salvar.")
             
         return redirect('registro_km')
     
-    # ... (Resto da função de histórico continua igual) ...
-    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:20]
-    despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:20]
+    # GET: Carrega histórico
+    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:50] # Aumentei limite
+    despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:50]
     
     historico = []
     for k in kms:
-        historico.append({'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 'valor': None, 'status': k.status})
+        historico.append({
+            'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 
+            'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 
+            'valor': None, 'status': k.status, 'nota_recusa': k.nota_recusa
+        })
     for d in despesas:
-        historico.append({'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 'status': d.status, 'comprovante': d.comprovante, 'especificacao': d.especificacao})
+        historico.append({
+            'id': d.id, 'data': d.data, 'numero_chamado': d.numero_chamado, 
+            'is_km': False, 'tipo_despesa': d.tipo, 'valor': d.valor, 
+            'status': d.status, 'comprovante': d.comprovante, 
+            'especificacao': d.especificacao, 'nota_recusa': d.nota_recusa
+        })
     
     historico.sort(key=lambda x: x['data'], reverse=True)
     return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
@@ -2622,31 +2643,32 @@ def avancar_status_km(request, controle_id):
     return redirect('area_gestor')
 @login_required
 def rejeitar_km_gestor(request, controle_id):
-    km = get_object_or_404(ControleKM, id=controle_id)
-    
-    # DEFINIÇÃO CRÍTICA: O status volta para 'Pendente'
-    # Isso garante que o registro reapareça na lista para ser editado ou aprovado novamente.
-    novo_status = 'Pendente'
-    
-    # Calcula o intervalo da semana para afetar todos os registros relacionados
-    dt = km.data
-    ini = dt - timedelta(days=dt.weekday())
-    fim = ini + timedelta(days=6)
+    if request.method == 'POST':
+        km = get_object_or_404(ControleKM, id=controle_id)
+        
+        motivo = request.POST.get('motivo_recusa')
+        
+        # Define status REJEITADO (para aparecer vermelho pro técnico)
+        novo_status = 'Rejeitado'
+        
+        dt = km.data
+        ini = dt - timedelta(days=dt.weekday())
+        fim = ini + timedelta(days=6)
 
-    # ATUALIZAÇÃO EM LOTE (Sem deletar nada)
-    # Atualiza Despesas
-    DespesaDiversa.objects.filter(
-        funcionario=km.funcionario, 
-        data__range=[ini, fim]
-    ).update(status=novo_status)
-    
-    # Atualiza KMs
-    ControleKM.objects.filter(
-        funcionario=km.funcionario, 
-        data__range=[ini, fim]
-    ).update(status=novo_status)
-    
-    messages.warning(request, "A solicitação foi devolvida para o status 'Pendente'.")
+        # Atualiza Despesas
+        DespesaDiversa.objects.filter(
+            funcionario=km.funcionario, 
+            data__range=[ini, fim]
+        ).update(status=novo_status, nota_recusa=motivo)
+        
+        # Atualiza KMs
+        ControleKM.objects.filter(
+            funcionario=km.funcionario, 
+            data__range=[ini, fim]
+        ).update(status=novo_status, nota_recusa=motivo)
+        
+        messages.warning(request, "Registro rejeitado. O técnico foi notificado.")
+        
     return redirect('area_gestor')
 @login_required
 def excluir_km(request, km_id):
@@ -2678,39 +2700,54 @@ def salvar_despesa_diversa_view(request):
     try: funcionario = request.user.funcionario
     except: return redirect('registro_km')
 
-    try:
-        data = request.POST.get('data_despesa')
-        
-        # --- TRAVA DE SEGURANÇA ---
-        if is_periodo_travado(funcionario, data):
-            messages.error(request, "ERRO: Semana já aprovada. Não é possível lançar despesas nesta data.")
-            return redirect('registro_km')
-        # --------------------------
+    datas = request.POST.getlist('data_despesa[]')
+    chamados = request.POST.getlist('numero_chamado[]')
+    tipos = request.POST.getlist('tipo_despesa[]')
+    especs = request.POST.getlist('especificacao[]')
+    valores = request.POST.getlist('valor[]')
+    arquivos = request.FILES.getlist('comprovante[]') # Atenção: Ordem dos arquivos pode ser tricky no HTML
 
-        chamado = request.POST.get('numero_chamado')
-        tipo = request.POST.get('tipo_despesa')
-        espec = request.POST.get('especificacao')
-        valor_str = request.POST.get('valor')
-        arquivo = request.FILES.get('comprovante')
+    saved_count = 0
+    
+    # OBS: O input file multiple ou lista de inputs file requer cuidado no frontend.
+    # Assumindo que o HTML enviará 'comprovante[]' corretamente indexado.
+    
+    for i in range(len(datas)):
+        try:
+            if not datas[i] or not valores[i]: continue
+            
+            data_final = datetime.strptime(datas[i], '%Y-%m-%d').date()
+            
+            # --- TRAVA DE SEGURANÇA ---
+            if is_periodo_travado(funcionario, data_final):
+                continue
+            
+            valor_str = valores[i]
+            valor_final = 0.00
+            if valor_str:
+                limpo = valor_str.replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+                try: valor_final = float(limpo)
+                except: valor_final = 0.00
 
-        if not arquivo:
-            messages.error(request, "Anexo obrigatório.")
-            return redirect('registro_km')
+            # Pega arquivo correspondente (se existir)
+            arquivo = arquivos[i] if i < len(arquivos) else None
+            
+            if not arquivo: continue # Obrigatório
 
-        valor_final = 0.00
-        if valor_str:
-            limpo = valor_str.replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
-            try: valor_final = float(limpo)
-            except: valor_final = 0.00
+            DespesaDiversa.objects.create(
+                funcionario=funcionario, data=data_final, numero_chamado=chamados[i],
+                tipo=tipos[i], especificacao=especs[i], valor=valor_final,
+                comprovante=arquivo, status='Pendente'
+            )
+            saved_count += 1
+        except Exception as e:
+            print(f"Erro despesa {i}: {e}")
+            continue
 
-        DespesaDiversa.objects.create(
-            funcionario=funcionario, data=data, numero_chamado=chamado,
-            tipo=tipo, especificacao=espec, valor=valor_final,
-            comprovante=arquivo, status='Pendente'
-        )
-        messages.success(request, f"Despesa de R$ {valor_final:.2f} lançada!")
-    except Exception as e:
-        messages.error(request, f"Erro: {e}")
+    if saved_count > 0:
+        messages.success(request, f"{saved_count} despesas lançadas!")
+    else:
+        messages.error(request, "Erro ao salvar despesas. Verifique os dados.")
 
     return redirect('registro_km')
 @login_required
@@ -2739,13 +2776,15 @@ def atualizar_dados_tecnico(request):
             func.operacao = request.POST.get('operacao')
             func.conta = request.POST.get('conta')
             
+            # --- CORREÇÃO: SALVANDO O PIX ---
+            func.chave_pix = request.POST.get('chave_pix')
+            
             func.save()
             messages.success(request, "Dados atualizados!")
         except Exception as e:
             messages.error(request, f"Erro: {e}")
             
     return redirect('registro_km')
-# Adicione isso no final ou junto com as funções de KM
 @login_required
 def repetir_rota_view(request):
     if request.method == 'POST':
@@ -3236,3 +3275,40 @@ class CustomPasswordResetDoneView(PasswordResetDoneView):
             except ValueError:
                 context['masked_email'] = email
         return context
+@login_required
+def editar_km_view(request):
+    if request.method == 'POST':
+        km_id = request.POST.get('km_id')
+        
+        try:
+            km = ControleKM.objects.get(id=km_id, funcionario__usuario=request.user)
+            
+            # Só permite editar se Pendente ou Rejeitado
+            if km.status not in ['Pendente', 'Rejeitado']:
+                messages.error(request, "Não é possível editar este registro (Status bloqueado).")
+                return redirect('registro_km')
+            
+            km.data = request.POST.get('data_viagem')
+            km.numero_chamado = request.POST.get('numero_chamado')
+            km.total_km = float(request.POST.get('km_manual').replace(',', '.'))
+            
+            # Ao editar, volta para Pendente e limpa a nota
+            km.status = 'Pendente'
+            km.nota_recusa = None 
+            km.save()
+            
+            # Atualiza o Trecho (assumindo 1 trecho por controle no modelo atual)
+            trecho = km.trechos.first()
+            if trecho:
+                trecho.nome_origem = request.POST.get('nome_origem')
+                trecho.nome_destino = request.POST.get('nome_destino')
+                trecho.origem = request.POST.get('google_url')
+                trecho.km = km.total_km
+                trecho.save()
+                
+            messages.success(request, "Registro corrigido e reenviado!")
+            
+        except Exception as e:
+            messages.error(request, f"Erro ao editar: {e}")
+            
+    return redirect('registro_km')

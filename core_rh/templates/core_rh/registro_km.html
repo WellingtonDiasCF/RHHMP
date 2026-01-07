@@ -10,7 +10,6 @@
 <script>
         document.documentElement.setAttribute('data-bs-theme', 'light');
         if (window.matchMedia) {
-            // Tenta sobrescrever a preferência do sistema
             try {
                 var meta = document.createElement('meta');
                 meta.name = "color-scheme";
@@ -25,97 +24,34 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
-        :root {
-            color-scheme: light;
-        }
-        /* --- ESTILOS GERAIS --- */
+        :root { color-scheme: light; }
         body { background-color: #f4f6f9; font-family: 'Inter', sans-serif; color: #333; min-height: 100vh; }
         .navbar-custom { background: linear-gradient(to right, #1a1a1a, #333); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .page-container { max-width: 1400px; margin: 0 auto; padding: 30px 20px; }
-        
-        /* --- TABS --- */
         .nav-tabs { border-bottom: 2px solid #e9ecef; margin-bottom: 20px; }
         .nav-tabs .nav-link { color: #64748b; font-weight: 600; border: none; padding: 12px 20px; border-radius: 8px 8px 0 0; }
         .nav-tabs .nav-link.active { color: #FF6600; background-color: #fff; border-bottom: 3px solid #FF6600; }
         .nav-tabs .nav-link:hover { color: #333; }
-
-        /* --- WEEK NAVIGATOR (Novo Estilo) --- */
-        .week-navigator {
-            display: flex;
-            align-items: center;
-            background-color: #f8f9fa;
-            border: 1px solid #e2e8f0;
-            border-radius: 50px;
-            padding: 4px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-
-        .btn-nav-week {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: 1px solid transparent;
-            background-color: #fff;
-            color: #64748b;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-        .btn-nav-week:hover {
-            background-color: #FF6600;
-            color: #fff;
-            border-color: #FF6600;
-        }
-
-        .week-display {
-            padding: 0 15px;
-            text-align: center;
-            min-width: 160px;
-        }
+        
+        .week-navigator { display: flex; align-items: center; background-color: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 50px; padding: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .btn-nav-week { width: 32px; height: 32px; border-radius: 50%; border: 1px solid transparent; background-color: #fff; color: #64748b; display: flex; align-items: center; justify-content: center; transition: all 0.2s; cursor: pointer; }
+        .btn-nav-week:hover { background-color: #FF6600; color: #fff; border-color: #FF6600; }
+        .week-display { padding: 0 15px; text-align: center; min-width: 160px; }
         .week-display .label { font-size: 0.7rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; display: block; line-height: 1; margin-bottom: 2px; }
         .week-display .range { font-size: 0.85rem; color: #334155; font-weight: 700; }
-
-        .btn-reset-filter {
-            font-size: 0.75rem;
-            text-decoration: none;
-            margin-left: 10px;
-            color: #FF6600;
-            font-weight: 600;
-            cursor: pointer;
-            border: 1px solid #FF6600;
-            padding: 4px 10px;
-            border-radius: 20px;
-            background: #fff;
-        }
+        .btn-reset-filter { font-size: 0.75rem; text-decoration: none; margin-left: 10px; color: #FF6600; font-weight: 600; cursor: pointer; border: 1px solid #FF6600; padding: 4px 10px; border-radius: 20px; background: #fff; }
         .btn-reset-filter:hover { background-color: #FF6600; color: #fff; }
 
-        /* --- CARDS & FORMS --- */
         .header-box { background: #fff; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
-        
-        .card-registro { 
-            border: 1px solid #eef2f6; 
-            border-radius: 16px; 
-            box-shadow: 0 8px 24px rgba(0,0,0,0.04); 
-            overflow: hidden; 
-            background: #fff; 
-        }
-        .card-header-registro {
-            background-color: #fff;
-            border-bottom: 1px solid #f1f5f9;
-            padding: 20px 25px;
-        }
-
+        .card-registro { border: 1px solid #eef2f6; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.04); overflow: hidden; background: #fff; }
+        .card-header-registro { background-color: #fff; border-bottom: 1px solid #f1f5f9; padding: 20px 25px; }
         .form-control-custom, .form-select-custom { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 12px 15px; border-radius: 8px; font-size: 0.95rem; }
         .form-control-custom:focus { background-color: #fff; border-color: #FF6600; box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.1); }
         
-        /* --- TABELA --- */
         .table-custom { border-collapse: separate; border-spacing: 0; }
         .table-custom thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; padding: 15px 20px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
         .table-custom tbody td { padding: 18px 20px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; background: #fff; }
         
-        /* --- STATUS BADGES --- */
         .badge-soft-primary { background-color: #e0f2fe; color: #0369a1; }
         .badge-soft-success { background-color: #dcfce7; color: #15803d; }
         .badge-soft-warning { background-color: #fef3c7; color: #b45309; }
@@ -123,17 +59,10 @@
         .badge-soft-secondary { background-color: #f1f5f9; color: #475569; }
         .badge-pill { padding: 0.5em 1em; border-radius: 50rem; font-weight: 600; font-size: 0.85rem; }
         
-        /* --- UTILS --- */
         .route-line { display: flex; align-items: center; margin-bottom: 4px; }
         .route-icon { width: 20px; text-align: center; margin-right: 8px; }
-        .btn-loading { pointer-events: none; opacity: 0.7; }
-        .spinner-icon { display: none; }
-        .loading .spinner-icon { display: inline-block; animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
-<link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
-    <link rel="apple-touch-icon" href="{% static 'images/icon.svg' %}">
-    <meta name="theme-color" content="#FF6600">
+    <link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
 </head>
 <body>
 
@@ -163,7 +92,7 @@
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'success' %}success{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4">
+                <div class="alert alert-{% if message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}danger{% endif %} alert-dismissible fade show shadow-sm rounded-3 border-0 mb-4">
                     <i class="fas fa-info-circle me-2"></i> {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
@@ -185,53 +114,58 @@
                 
                 <div class="card card-registro mb-4">
                     <div class="card-header-registro d-flex justify-content-between align-items-center">
-                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-map-marked-alt text-warning me-2"></i> Novo Registro de Rota</h5>
+                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-map-marked-alt text-warning me-2"></i> Lançamento de Rotas</h5>
                         <button type="button" class="btn btn-outline-primary rounded-pill fw-bold btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalDespesaDiversa">
-                            <i class="fas fa-receipt me-1"></i> Despesa Extra
+                            <i class="fas fa-receipt me-1"></i> Lançar Despesas Extras
                         </button>
                     </div>
 
                     <div class="card-body p-4">
-                        <form method="POST" id="formRegistro">
+                        <form method="POST" id="formRegistro" action="{% url 'registro_km' %}">
                             {% csrf_token %}
                             
-                            <div class="row g-3 mb-4">
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-1 text-secondary">Data da Viagem</label>
-                                    <input type="date" name="data_viagem" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-1 text-secondary">Nº Chamado / OS</label>
-                                    <input type="text" name="numero_chamado" class="form-control form-control-custom" placeholder="Ex: 12345" required>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-1 text-secondary">Origem (Nome)</label>
-                                    <input type="text" name="nome_origem" class="form-control form-control-custom" placeholder="Residência / Nome da Unidade" required>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-1 text-secondary">Destino (Nome)</label>
-                                    <input type="text" name="nome_destino" class="form-control form-control-custom" placeholder="Residência / Nome da Unidade" required>
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-4">
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-2 text-success">Quilometragem (KM)</label>
-                                    <input type="number" step="0.1" name="km_manual" class="form-control form-control-custom border-success" placeholder="Ex: 15.5" required>
-                                </div>
-                                <div class="col-md-9">
-                                    <label class="fw-bold small mb-2 text-primary"><i class="fas fa-link me-1"></i> Link da Rota (Google Maps)</label>
-                                    <div class="input-group">
-                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fab fa-google"></i></span>
-                                        <input type="text" name="google_url" class="form-control border-start-0" style="background-color: #f8f9fa;" placeholder="Cole aqui o link completo da rota..." required autocomplete="off">
+                            <div id="rotas-container">
+                                <div class="rota-item bg-light p-3 rounded-3 mb-3 border position-relative">
+                                    <h6 class="fw-bold text-secondary mb-3 small text-uppercase">Rota 1</h6>
+                                    
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-3">
+                                            <label class="fw-bold small mb-1">Data da Viagem</label>
+                                            <input type="date" name="data_viagem[]" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="fw-bold small mb-1">Nº Chamado / OS</label>
+                                            <input type="text" name="numero_chamado[]" class="form-control form-control-custom" placeholder="Ex: 12345" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="fw-bold small mb-1">Origem</label>
+                                            <input type="text" name="nome_origem[]" class="form-control form-control-custom" placeholder="Local de partida" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="fw-bold small mb-1">Destino</label>
+                                            <input type="text" name="nome_destino[]" class="form-control form-control-custom" placeholder="Local de chegada" required>
+                                        </div>
                                     </div>
-                                    <div class="form-text small">Cole o link da rota para conferência (obrigatório).</div>
-                                </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="fw-bold small mb-1 text-success">KM Total</label>
+                                            <input type="number" step="0.1" name="km_manual[]" class="form-control form-control-custom border-success" placeholder="Ex: 15.5" required>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <label class="fw-bold small mb-1 text-primary"><i class="fab fa-google me-1"></i> Link Google Maps</label>
+                                            <input type="text" name="google_url[]" class="form-control form-control-custom" placeholder="https://maps.google.com..." required>
+                                        </div>
+                                    </div>
+                                    </div>
                             </div>
 
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <button type="button" class="btn btn-outline-secondary rounded-pill btn-sm" onclick="adicionarRota()">
+                                    <i class="fas fa-plus me-1"></i> Adicionar Outra Rota
+                                </button>
                                 <button type="submit" class="btn btn-warning px-5 py-2 fw-bold shadow-sm text-dark rounded-pill">
-                                    <i class="fas fa-save me-2"></i> SALVAR REGISTRO
+                                    <i class="fas fa-save me-2"></i> ENVIAR TODAS AS ROTAS
                                 </button>
                             </div>
                         </form>
@@ -241,35 +175,23 @@
                 <div class="card card-custom border-0 shadow-sm">
                     <div class="card-header bg-white py-3 border-bottom">
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-                            
                             <div class="d-flex align-items-center">
                                 <h6 class="fw-bold text-dark mb-0 me-3">
-                                    <i class="fas fa-calendar-alt me-2 text-primary"></i>Histórico
+                                    <i class="fas fa-history me-2 text-primary"></i>Histórico Recente
                                 </h6>
                                 <span class="badge bg-light text-dark border" id="countBadge">{{ historico|length }} itens</span>
                             </div>
-                            
                             <div class="d-flex align-items-center">
                                 <div class="week-navigator">
-                                    <button type="button" class="btn-nav-week" onclick="changeWeek(-1)" title="Semana Anterior">
-                                        <i class="fas fa-chevron-left"></i>
-                                    </button>
-                                    
+                                    <button type="button" class="btn-nav-week" onclick="changeWeek(-1)"><i class="fas fa-chevron-left"></i></button>
                                     <div class="week-display">
-                                        <span class="label">Filtro Semanal</span>
-                                        <span class="range" id="weekRangeText">Carregando...</span>
+                                        <span class="label">Período</span>
+                                        <span class="range" id="weekRangeText">...</span>
                                     </div>
-
-                                    <button type="button" class="btn-nav-week" onclick="changeWeek(1)" title="Próxima Semana">
-                                        <i class="fas fa-chevron-right"></i>
-                                    </button>
+                                    <button type="button" class="btn-nav-week" onclick="changeWeek(1)"><i class="fas fa-chevron-right"></i></button>
                                 </div>
-                                
-                                <span class="btn-reset-filter" onclick="resetFilter()" id="btnResetFilter" style="display: none;">
-                                    Ver Tudo
-                                </span>
+                                <span class="btn-reset-filter" onclick="resetFilter()" id="btnResetFilter" style="display: none;">Ver Tudo</span>
                             </div>
-
                         </div>
                     </div>
                     
@@ -279,7 +201,7 @@
                                 <tr>
                                     <th class="ps-4">Data</th>
                                     <th>Chamado</th> 
-                                    <th style="width: 40%;">Descrição / Detalhes</th>
+                                    <th style="width: 40%;">Detalhes</th>
                                     <th class="text-center">Valor / KM</th>
                                     <th class="text-center">Status</th>
                                     <th class="text-end pe-4">Ações</th>
@@ -293,91 +215,77 @@
                                     <td>
                                         {% if item.tipo_despesa %}
                                             <div class="d-flex align-items-start">
-                                                <div class="me-3 mt-1">
-                                                    <span class="avatar-sm rounded-circle bg-light d-flex align-items-center justify-content-center p-2 border">
-                                                        <i class="fas fa-receipt text-success fs-5"></i>
-                                                    </span>
-                                                </div>
+                                                <div class="me-3 mt-1"><i class="fas fa-receipt text-success fs-5"></i></div>
                                                 <div>
                                                     <h6 class="mb-1 text-dark fw-bold">{{ item.tipo_despesa }}</h6>
-                                                    {% if item.especificacao %}
-                                                        <div class="small text-muted mb-1"><i class="fas fa-info-circle me-1"></i> {{ item.especificacao }}</div>
-                                                    {% endif %}
+                                                    {% if item.especificacao %}<div class="small text-muted">{{ item.especificacao }}</div>{% endif %}
                                                     {% if item.comprovante %}
-                                                        <a href="{{ item.comprovante.url }}" target="_blank" class="badge bg-white text-primary border text-decoration-none fw-normal mt-1">
-                                                            <i class="fas fa-paperclip me-1"></i> Ver Recibo Anexado
-                                                        </a>
+                                                        <a href="{{ item.comprovante.url }}" target="_blank" class="badge bg-light text-primary border text-decoration-none mt-1">Ver Anexo</a>
                                                     {% endif %}
                                                 </div>
                                             </div>
                                         {% elif item.is_km %}
                                             {% if item.trechos %}
                                                 {% for t in item.trechos %}
-                                                <div class="mb-3 last-mb-0">
-                                                    <div class="route-line">
-                                                        <div class="route-icon"><i class="fas fa-circle text-success small"></i></div>
-                                                        <span class="text-dark small fw-bold">{{ t.nome_origem|default:t.origem|truncatechars:40 }}</span>
-                                                    </div>
-                                                    <div class="route-line">
-                                                        <div class="route-icon"><i class="fas fa-ellipsis-v text-muted small"></i></div>
-                                                    </div>
-                                                    <div class="route-line">
-                                                        <div class="route-icon"><i class="fas fa-map-marker-alt text-danger"></i></div>
-                                                        <span class="text-dark small fw-bold">{{ t.nome_destino|default:t.destino|truncatechars:40 }}</span>
-                                                    </div>
+                                                <div class="mb-2">
+                                                    <span class="text-dark small fw-bold">{{ t.nome_origem }} <i class="fas fa-arrow-right mx-1 text-muted"></i> {{ t.nome_destino }}</span>
                                                 </div>
                                                 {% endfor %}
                                             {% else %}
-                                                <div class="d-flex align-items-center text-muted py-2">
-                                                    <span class="small fw-bold">Registro Manual</span>
-                                                </div>
+                                                <span class="small">Rota Manual</span>
                                             {% endif %}
-                                        {% else %}
-                                            <span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i> Erro</span>
+                                        {% endif %}
+                                        
+                                        {% if item.status == 'Rejeitado' and item.nota_recusa %}
+                                            <div class="alert alert-danger p-2 mt-2 mb-0 small border-0 bg-danger bg-opacity-10">
+                                                <strong><i class="fas fa-exclamation-circle"></i> Motivo da Recusa:</strong> {{ item.nota_recusa }}
+                                            </div>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
                                         {% if item.tipo_despesa %}
-                                            {% if item.valor %}
-                                                <span class="badge badge-pill badge-soft-success">R$ {{ item.valor|floatformat:2 }}</span>
-                                            {% else %}
-                                                <span class="badge badge-pill badge-soft-secondary">Reembolso</span>
-                                            {% endif %}
+                                            R$ {{ item.valor|floatformat:2 }}
                                         {% else %}
-                                            {% if item.total_km %}
-                                                <span class="badge badge-pill badge-soft-primary">{{ item.total_km }} km</span>
-                                            {% else %}
-                                                <span class="badge badge-pill badge-soft-secondary">--</span>
-                                            {% endif %}
+                                            {{ item.total_km }} km
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
-                                        <span class="badge badge-pill badge-soft-{% if item.status == 'Aprovado' or item.status == 'Pago' %}success{% elif item.status == 'Pendente' %}warning{% else %}danger{% endif %}">{{ item.status }}</span>
+                                        {% if item.status == 'Rejeitado' %}
+                                            <span class="badge badge-soft-danger">Rejeitado</span>
+                                        {% elif item.status == 'Pendente' %}
+                                            <span class="badge badge-soft-warning">Pendente</span>
+                                        {% else %}
+                                            <span class="badge badge-soft-success">{{ item.status }}</span>
+                                        {% endif %}
                                     </td>
                                     <td class="text-end pe-4">
-                                        {% if item.tipo_despesa %}
-                                            <a href="{% url 'excluir_despesa' item.id %}" class="btn btn-sm btn-light text-danger border rounded-circle" onclick="return confirm('Tem certeza?')" title="Excluir">
+                                        {% if item.status == 'Pendente' or item.status == 'Rejeitado' %}
+                                            {% if item.is_km %}
+                                                <button type="button" class="btn btn-sm btn-outline-primary border rounded-circle" 
+                                                        onclick="abrirModalEditar('{{ item.id }}', '{{ item.data|date:'Y-m-d' }}', '{{ item.numero_chamado }}', '{{ item.total_km }}', '{{ item.trechos.first.nome_origem }}', '{{ item.trechos.first.nome_destino }}', '{{ item.trechos.first.origem }}')" 
+                                                        title="Editar">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            {% endif %}
+                                            
+                                            <a href="{% if item.is_km %}{% url 'excluir_km' item.id %}{% else %}{% url 'excluir_despesa' item.id %}{% endif %}" 
+                                               class="btn btn-sm btn-light text-danger border rounded-circle ms-1" onclick="return confirm('Excluir este item?')" title="Excluir">
                                                 <i class="fas fa-trash-alt"></i>
                                             </a>
-                                        {% else %}
-                                            <div class="d-flex justify-content-end gap-2">
-                                                <button type="button" class="btn btn-sm btn-outline-primary rounded-circle border" 
-                                                        onclick="abrirModalRepetir('{{ item.id }}', '{{ item.numero_chamado }}')" 
-                                                        title="Repetir Rota">
-                                                    <i class="fas fa-redo"></i>
-                                                </button>
-
-                                                <a href="{% url 'excluir_km' item.id %}" class="btn btn-sm btn-light text-danger border rounded-circle" onclick="return confirm('Tem certeza?')" title="Excluir">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </a>
-                                            </div>
+                                        {% endif %}
+                                        
+                                        {% if item.is_km %}
+                                        <button type="button" class="btn btn-sm btn-outline-secondary border rounded-circle ms-1" 
+                                                onclick="abrirModalRepetir('{{ item.id }}', '{{ item.numero_chamado }}')" title="Repetir">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
                                         {% endif %}
                                     </td>
                                 </tr>
                                 {% empty %}
-                                <tr id="no-data-row"><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum lançamento encontrado</h6></td></tr>
+                                <tr id="no-data-row"><td colspan="6" class="text-center py-4 text-muted">Nenhum lançamento.</td></tr>
                                 {% endfor %}
-                                <tr id="filter-no-results" style="display: none;"><td colspan="6" class="text-center py-5 text-muted"><h6 class="fw-bold">Nenhum registro nesta semana</h6></td></tr>
+                                <tr id="filter-no-results" style="display: none;"><td colspan="6" class="text-center py-4 text-muted">Vazio nesta semana.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -392,177 +300,172 @@
                     <div class="card-body p-4">
                         <form action="{% url 'atualizar_dados_tecnico' %}" method="POST">
                             {% csrf_token %}
-                            
-                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 mt-2 border-bottom pb-2">Endereço Residencial</h6>
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 mt-2 border-bottom pb-2">Endereço</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-3">
-                                    <label class="fw-bold small mb-1">CEP</label>
-                                    <input type="text" name="cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}" maxlength="9" placeholder="00000-000">
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="fw-bold small mb-1">Endereço (Rua, Nº)</label>
-                                    <input type="text" name="endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Bairro</label>
-                                    <input type="text" name="bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Cidade</label>
-                                    <input type="text" name="cidade" class="form-control form-control-custom" value="{{ funcionario.cidade|default:'' }}">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="fw-bold small mb-1">Estado</label>
-                                    <input type="text" name="estado" class="form-control form-control-custom" value="{{ funcionario.estado|default:'' }}" maxlength="2">
-                                </div>
+                                <div class="col-md-3"><label class="small fw-bold">CEP</label><input type="text" name="cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}"></div>
+                                <div class="col-md-5"><label class="small fw-bold">Endereço</label><input type="text" name="endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}"></div>
+                                <div class="col-md-4"><label class="small fw-bold">Bairro</label><input type="text" name="bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}"></div>
+                                <div class="col-md-8"><label class="small fw-bold">Cidade</label><input type="text" name="cidade" class="form-control form-control-custom" value="{{ funcionario.cidade|default:'' }}"></div>
+                                <div class="col-md-4"><label class="small fw-bold">Estado</label><input type="text" name="estado" class="form-control form-control-custom" value="{{ funcionario.estado|default:'' }}"></div>
                             </div>
 
-                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Dados Operacionais</h6>
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Operacional</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Base de Atendimento</label>
-                                    <input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}" placeholder="Ex: BH / Divinópolis">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Tipo de Veículo</label>
-                                    <input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}" placeholder="Ex: Carro Próprio / Moto">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1 text-success">Valor do KM (R$)</label>
-                                    <div class="input-group">
-                                        <span class="input-group-text border-0 bg-success text-white">R$</span>
-                                        <input type="text" name="valor_km" class="form-control form-control-custom" value="{{ funcionario.valor_km|default:''|floatformat:2 }}" placeholder="0,00">
-                                    </div>
-                                    <div class="form-text small">Valor acordado por quilômetro rodado.</div>
-                                </div>
+                                <div class="col-md-6"><label class="small fw-bold">Base</label><input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}"></div>
+                                <div class="col-md-6"><label class="small fw-bold">Veículo</label><input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}"></div>
                             </div>
 
-                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Dados Bancários (Para Reembolso)</h6>
+                            <h6 class="text-secondary fw-bold small text-uppercase mb-3 border-bottom pb-2">Pagamento</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Banco</label>
-                                    <input type="text" name="banco" class="form-control form-control-custom" value="{{ funcionario.banco|default:'' }}" placeholder="Ex: Caixa, Bradesco">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="fw-bold small mb-1">Agência</label>
-                                    <input type="text" name="agencia" class="form-control form-control-custom" value="{{ funcionario.agencia|default:'' }}">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="fw-bold small mb-1">Operação</label>
-                                    <input type="text" name="operacao" class="form-control form-control-custom" value="{{ funcionario.operacao|default:'' }}" placeholder="Ex: 013">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="fw-bold small mb-1">Conta</label>
-                                    <input type="text" name="conta" class="form-control form-control-custom" value="{{ funcionario.conta|default:'' }}">
-                                </div>
-                            </div>
-
-                            <div class="row g-3 mb-4">
+                                <div class="col-md-3"><label class="small fw-bold">Banco</label><input type="text" name="banco" class="form-control form-control-custom" value="{{ funcionario.banco|default:'' }}"></div>
+                                <div class="col-md-3"><label class="small fw-bold">Agência</label><input type="text" name="agencia" class="form-control form-control-custom" value="{{ funcionario.agencia|default:'' }}"></div>
+                                <div class="col-md-3"><label class="small fw-bold">Conta</label><input type="text" name="conta" class="form-control form-control-custom" value="{{ funcionario.conta|default:'' }}"></div>
+                                <div class="col-md-3"><label class="small fw-bold">Operação</label><input type="text" name="operacao" class="form-control form-control-custom" value="{{ funcionario.operacao|default:'' }}"></div>
+                                
                                 <div class="col-md-12">
                                     <label class="fw-bold small mb-1 text-primary"><i class="fas fa-qrcode me-1"></i> Chave PIX</label>
-                                    <input type="text" name="chave_pix" class="form-control form-control-custom border-primary" value="{{ funcionario.chave_pix|default:'' }}" placeholder="CPF, Email, Telefone ou Aleatória">
-                                    <div class="form-text small">Chave preferencial para recebimento ágil.</div>
+                                    <input type="text" name="chave_pix" class="form-control form-control-custom border-primary" value="{{ funcionario.chave_pix|default:'' }}" placeholder="CPF, Email, Telefone...">
                                 </div>
                             </div>
 
-                            <div class="d-flex justify-content-end mt-4">
-                                <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">
-                                    <i class="fas fa-save me-2"></i> Salvar Meus Dados
-                                </button>
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">Salvar Dados</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
-
         </div> 
     </div>
 
-    <div class="modal fade" id="modalDespesaDiversa" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+    <div class="modal fade" id="modalDespesaDiversa" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <form action="{% url 'salvar_despesa_diversa' %}" method="POST" enctype="multipart/form-data" class="modal-content">
                 {% csrf_token %}
                 <div class="modal-header">
-                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-receipt text-primary me-2"></i> Nova Despesa Diversa</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-receipt text-primary me-2"></i> Lançar Despesas Extras</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="fw-bold small mb-1">Data</label>
-                            <input type="date" name="data_despesa" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="fw-bold small mb-1">Nº Chamado</label>
-                            <input type="text" name="numero_chamado" class="form-control form-control-custom" placeholder="Ex: 5543" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="fw-bold small mb-1">Valor (R$)</label>
-                            <div class="input-group">
-                                <span class="input-group-text border-0 bg-light">R$</span>
-                                <input type="text" name="valor" class="form-control form-control-custom ps-2" placeholder="0,00" required>
+                <div class="modal-body bg-light">
+                    <div id="container-despesas">
+                        <div class="despesa-item bg-white p-3 rounded mb-3 shadow-sm position-relative">
+                            <h6 class="fw-bold text-secondary mb-2 small">Despesa 1</h6>
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Data</label>
+                                    <input type="date" name="data_despesa[]" class="form-control form-control-sm" value="{% now 'Y-m-d' %}" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Chamado</label>
+                                    <input type="text" name="numero_chamado[]" class="form-control form-control-sm" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Valor (R$)</label>
+                                    <input type="text" name="valor[]" class="form-control form-control-sm" placeholder="0,00" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Tipo</label>
+                                    <select name="tipo_despesa[]" class="form-select form-select-sm" required>
+                                        <option value="Estacionamento">Estacionamento</option>
+                                        <option value="Pedagio">Pedágio</option>
+                                        <option value="Jantar">Jantar</option>
+                                        <option value="Hospedagem">Hospedagem</option>
+                                        <option value="Outra">Outra</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="small fw-bold">Especificação</label>
+                                    <input type="text" name="especificacao[]" class="form-control form-control-sm" placeholder="Opcional">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="small fw-bold">Comprovante</label>
+                                    <input type="file" name="comprovante[]" class="form-control form-control-sm" accept="image/*,.pdf" required>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="fw-bold small mb-1">Tipo de Despesa</label>
-                            <select name="tipo_despesa" id="selectTipoDespesa" class="form-select form-control-custom" onchange="toggleEspecificacao()" required>
-                                <option value="" selected disabled>Selecione...</option>
-                                <option value="Estacionamento">Estacionamento</option>
-                                <option value="Pedagio">Pedágio</option>
-                                <option value="Jantar">Jantar</option>
-                                <option value="Hospedagem">Hospedagem</option>
-                                <option value="Outra">Outra (Especificar)</option>
-                            </select>
-                        </div>
-                        <div class="col-12" id="divEspecificacao" style="display: none;">
-                            <label class="fw-bold small mb-1 text-primary">Especifique "Outra"</label>
-                            <input type="text" name="especificacao" id="inputEspecificacao" class="form-control form-control-custom" placeholder="Ex: Material de escritório">
-                        </div>
-                        <div class="col-12">
-                            <label class="fw-bold small mb-1">Comprovante / Recibo</label>
-                            <input type="file" name="comprovante" class="form-control form-control-custom" accept="image/*,.pdf" required>
-                            <div class="form-text small">Obrigatório anexar foto ou PDF.</div>
-                        </div>
                     </div>
+                    
+                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill mt-2" onclick="adicionarDespesa()">
+                        <i class="fas fa-plus me-1"></i> Adicionar Outra Despesa
+                    </button>
                 </div>
-                <div class="modal-footer border-0 pt-0">
+                <div class="modal-footer">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Salvar Despesa</button>
+                    <button type="submit" class="btn btn-primary fw-bold">Salvar Todas</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div class="modal fade" id="modalRepetirRota" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="modalEditarKM" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <form action="{% url 'editar_km_view' %}" method="POST" class="modal-content">
+                {% csrf_token %}
+                <input type="hidden" name="km_id" id="edit_km_id">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark">Editar Rota</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small py-2 mb-3">
+                        <i class="fas fa-info-circle me-1"></i> Ao salvar, o status voltará para <strong>Pendente</strong>.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Data</label>
+                            <input type="date" name="data_viagem" id="edit_data" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Chamado</label>
+                            <input type="text" name="numero_chamado" id="edit_chamado" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Origem</label>
+                            <input type="text" name="nome_origem" id="edit_origem" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Destino</label>
+                            <input type="text" name="nome_destino" id="edit_destino" class="form-control" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="small fw-bold text-success">KM</label>
+                            <input type="number" step="0.1" name="km_manual" id="edit_km" class="form-control border-success" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="small fw-bold text-primary">Link Maps</label>
+                            <input type="text" name="google_url" id="edit_url" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-bold">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalRepetirRota" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <form action="{% url 'repetir_rota_view' %}" method="POST" class="modal-content">
                 {% csrf_token %}
                 <input type="hidden" name="km_id" id="input_km_id_repetir">
-                
                 <div class="modal-header border-0 pb-0">
-                    <h6 class="modal-title fw-bold text-dark">
-                        <i class="fas fa-redo text-primary me-2"></i> Repetir Rota
-                    </h6>
+                    <h6 class="modal-title fw-bold text-dark">Repetir Rota</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                
                 <div class="modal-body pt-3">
-                    <p class="text-muted small mb-3">Copiar dados de KM e Local para um novo registro.</p>
-                    
+                    <p class="text-muted small mb-3">Cria uma cópia exata para nova data.</p>
                     <div class="mb-3">
                         <label class="fw-bold small mb-1">Nova Data</label>
-                        <input type="date" name="nova_data" class="form-control form-control-custom" value="{% now 'Y-m-d' %}" required>
+                        <input type="date" name="nova_data" class="form-control" value="{% now 'Y-m-d' %}" required>
                     </div>
-                    
                     <div class="mb-3">
-                        <label class="fw-bold small mb-1">Novo Nº Chamado</label>
-                        <input type="text" name="novo_chamado" id="input_novo_chamado" class="form-control form-control-custom" placeholder="Ex: 12345" required>
+                        <label class="fw-bold small mb-1">Novo Chamado</label>
+                        <input type="text" name="novo_chamado" id="input_novo_chamado" class="form-control" required>
                     </div>
-                    
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary fw-bold shadow-sm rounded-pill">
-                            Confirmar Cópia
-                        </button>
+                        <button type="submit" class="btn btn-primary fw-bold rounded-pill">Confirmar</button>
                     </div>
                 </div>
             </form>
@@ -571,75 +474,111 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function toggleEspecificacao() {
-            const select = document.getElementById('selectTipoDespesa');
-            const divEsp = document.getElementById('divEspecificacao');
-            const inputEsp = document.getElementById('inputEspecificacao');
-            if (select.value === 'Outra') { divEsp.style.display = 'block'; inputEsp.required = true; } 
-            else { divEsp.style.display = 'none'; inputEsp.required = false; inputEsp.value = ''; }
+        // --- FUNÇÕES DE REPETIÇÃO DE CAMPOS ---
+        function adicionarRota() {
+            const container = document.getElementById('rotas-container');
+            const clone = container.children[0].cloneNode(true);
+            
+            // Limpa valores
+            clone.querySelectorAll('input').forEach(input => {
+                if(input.type !== 'date') input.value = '';
+            });
+            
+            // Atualiza título da rota
+            const num = container.children.length + 1;
+            clone.querySelector('h6').innerText = 'Rota ' + num;
+            
+            // Adiciona botão de remover se não tiver
+            if(!clone.querySelector('.btn-remove')) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm btn-link text-danger position-absolute top-0 end-0 mt-2 me-2 btn-remove';
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.type = 'button';
+                btn.onclick = function() { this.closest('.rota-item').remove(); };
+                clone.appendChild(btn);
+            }
+            container.appendChild(clone);
         }
 
-        function abrirModalRepetir(id, chamadoAntigo) {
+        function adicionarDespesa() {
+            const container = document.getElementById('container-despesas');
+            const clone = container.children[0].cloneNode(true);
+            
+            clone.querySelectorAll('input').forEach(input => {
+                if(input.type !== 'date') input.value = '';
+            });
+            clone.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+            
+            const num = container.children.length + 1;
+            clone.querySelector('h6').innerText = 'Despesa ' + num;
+            
+            if(!clone.querySelector('.btn-remove')) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm btn-link text-danger position-absolute top-0 end-0 mt-2 me-2 btn-remove';
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.type = 'button';
+                btn.onclick = function() { this.closest('.despesa-item').remove(); };
+                clone.appendChild(btn);
+            }
+            container.appendChild(clone);
+        }
+
+        // --- FUNÇÕES DOS MODAIS ---
+        function abrirModalRepetir(id, chamado) {
             document.getElementById('input_km_id_repetir').value = id;
-            var myModal = new bootstrap.Modal(document.getElementById('modalRepetirRota'));
-            myModal.show();
+            new bootstrap.Modal(document.getElementById('modalRepetirRota')).show();
         }
 
-        // --- LÓGICA DE NAVEGAÇÃO DE SEMANAS (SEGUNDA A DOMINGO) ---
-        
-        let currentMonday = null; // Data de referência (Sempre uma Segunda-feira)
-        let isFilterActive = true; // Começa ativado na semana atual
+        function abrirModalEditar(id, data, chamado, km, origem, destino, url) {
+            document.getElementById('edit_km_id').value = id;
+            document.getElementById('edit_data').value = data;
+            document.getElementById('edit_chamado').value = chamado;
+            document.getElementById('edit_km').value = km.replace(',', '.');
+            document.getElementById('edit_origem').value = origem;
+            document.getElementById('edit_destino').value = destino;
+            document.getElementById('edit_url').value = url;
+            new bootstrap.Modal(document.getElementById('modalEditarKM')).show();
+        }
+
+        // --- NAVEGAÇÃO DE SEMANAS (SCRIPT MANTIDO DO SEU CÓDIGO) ---
+        let currentMonday = null;
+        let isFilterActive = true;
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Inicializa na Segunda-feira da semana atual
             currentMonday = getMonday(new Date());
             updateWeekDisplay();
         });
 
-        // Função Auxiliar: Pega a Segunda-feira de uma data qualquer
         function getMonday(d) {
             d = new Date(d);
-            var day = d.getDay(),
-                diff = d.getDate() - day + (day == 0 ? -6 : 1); // Se for Domingo (0), volta 6 dias, senão volta (day-1)
+            var day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6 : 1);
             return new Date(d.setDate(diff));
         }
 
-        // Navegação (+1 ou -1 semana)
         function changeWeek(direction) {
             isFilterActive = true;
-            // Adiciona ou subtrai 7 dias
             currentMonday.setDate(currentMonday.getDate() + (direction * 7));
             updateWeekDisplay();
         }
 
-        // Reseta para mostrar tudo
         function resetFilter() {
             isFilterActive = false;
             updateWeekDisplay();
         }
 
-        // Atualiza Visual e Aplica Filtro
         function updateWeekDisplay() {
             const rangeText = document.getElementById('weekRangeText');
             const resetBtn = document.getElementById('btnResetFilter');
-            
-            // Calcula Domingo (Final da semana)
             const currentSunday = new Date(currentMonday);
             currentSunday.setDate(currentMonday.getDate() + 6);
-            // Ajusta hora para final do dia para comparação correta
             currentSunday.setHours(23, 59, 59, 999);
-            
-            // Ajusta hora da segunda para inicio do dia
             currentMonday.setHours(0, 0, 0, 0);
 
             if (isFilterActive) {
-                // Formata data: DD/MM
                 const startStr = currentMonday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
                 const endStr = currentSunday.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                
                 rangeText.innerText = `${startStr} - ${endStr}`;
                 resetBtn.style.display = 'inline-block';
-                
                 applyFilter(currentMonday, currentSunday);
             } else {
                 rangeText.innerText = "Todo o Período";
@@ -648,18 +587,15 @@
             }
         }
 
-        // Lógica de Filtragem da Tabela
         function applyFilter(startDate, endDate) {
             const rows = document.querySelectorAll('#historyBody tr[data-date]');
             const noResultsRow = document.getElementById('filter-no-results');
-            const noDataRow = document.getElementById('no-data-row'); // Mensagem original "Nenhum lançamento"
+            const noDataRow = document.getElementById('no-data-row');
             let visibleCount = 0;
 
             rows.forEach(row => {
-                // Converte string 'YYYY-MM-DD' para Date local (hack seguro para evitar UTC shift)
                 const parts = row.getAttribute('data-date').split('-');
-                const rowDate = new Date(parts[0], parts[1]-1, parts[2], 12, 0, 0); // Meio dia para evitar borda
-                
+                const rowDate = new Date(parts[0], parts[1]-1, parts[2], 12, 0, 0);
                 if (rowDate >= startDate && rowDate <= endDate) {
                     row.style.display = '';
                     visibleCount++;
@@ -668,19 +604,12 @@
                 }
             });
 
-            // Atualiza badge de contagem
             document.getElementById('countBadge').innerText = visibleCount + ' visíveis';
-
-            // Gerencia mensagens de "Vazio"
             if (noDataRow) noDataRow.style.display = 'none'; 
             
             if (noResultsRow) {
-                // Se filtro está ativo, não achou nada, e existem linhas no total
                 if (visibleCount === 0 && rows.length > 0) {
                     noResultsRow.style.display = '';
-                    // Atualiza texto para feedback melhor
-                    noResultsRow.querySelector('h6').innerText = "Nenhum registro nesta semana (" + 
-                        startDate.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ")";
                 } else {
                     noResultsRow.style.display = 'none';
                 }
@@ -690,7 +619,6 @@
         function showAllRows() {
             const rows = document.querySelectorAll('#historyBody tr[data-date]');
             const noResultsRow = document.getElementById('filter-no-results');
-            
             rows.forEach(row => row.style.display = '');
             document.getElementById('countBadge').innerText = rows.length + ' itens';
             if (noResultsRow) noResultsRow.style.display = 'none';

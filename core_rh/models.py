@@ -321,7 +321,7 @@ class ControleKM(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     numero_chamado = models.CharField(max_length=50, null=True, blank=True, verbose_name="Nº Chamado")
-
+    nota_recusa = models.TextField("Motivo da Recusa", blank=True, null=True)
     def __str__(self):
         return f"{self.funcionario.nome_completo} - {self.data}"
 class DespesaDiversa(models.Model):
@@ -342,7 +342,7 @@ class DespesaDiversa(models.Model):
     valor = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True) # Opcional, mas recomendado
     status = models.CharField(max_length=50, default='Pendente')
     created_at = models.DateTimeField(auto_now_add=True)
-
+    nota_recusa = models.TextField("Motivo da Recusa", blank=True, null=True)
     def __str__(self):
         return f"{self.tipo} - {self.numero_chamado}"
 

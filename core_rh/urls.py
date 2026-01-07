@@ -50,16 +50,20 @@ urlpatterns = [
     
     # --- GESTÃO DE CONTRACHEQUES (RH) ---
     path('gestao-contracheques/', views.gerenciar_contracheques, name='gerenciar_contracheques'),
-    
-    # NOVAS ROTAS ADICIONADAS PARA OS BOTÕES DE AÇÃO:
     path('rh/contracheque/upload/<int:func_id>/', views.upload_individual_contracheque, name='upload_individual_contracheque'),
     path('rh/contracheque/excluir/<int:cc_id>/', views.excluir_contracheque, name='excluir_contracheque'),
+    
+    # --- ATESTADOS ---
     path('meus-atestados/', views.meus_atestados_view, name='meus_atestados'),
-    # ...
     path('api/admin/atestados-partial/', views.admin_atestados_partial_view, name='admin_atestados_partial'),
     path('rh/atestado/acao/', views.rh_acao_atestado, name='rh_acao_atestado'),
+
     # --- REGISTRO DE KM ---
     path('km/', views.registro_km_view, name='registro_km'),
+    
+    # ---> ADICIONE ESTA LINHA AQUI <---
+    path('km/editar/', views.editar_km_view, name='editar_km_view'), 
+
     path('km/excluir/<int:km_id>/', views.excluir_km, name='excluir_km'),
     path('gestor/km/avancar/<int:controle_id>/', views.avancar_status_km, name='avancar_status_km'),
     path('gestor/km/rejeitar/<int:controle_id>/', views.rejeitar_km_gestor, name='rejeitar_km_gestor'),
