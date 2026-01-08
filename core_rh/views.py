@@ -168,7 +168,7 @@ def home(request):
     try:
         funcionario = Funcionario.objects.get(usuario=request.user)
         
-        # --- CORREÇÃO: Verifica se é gestor (Principal ou Lista) de equipes NÃO ocultas ---
+        # Verifica se é gestor (Principal ou Lista) de equipes NÃO ocultas
         equipes_lideradas = Equipe.objects.filter(
             Q(oculta=False) & (Q(gestor=funcionario) | Q(gestores=funcionario))
         ).distinct()
@@ -177,8 +177,16 @@ def home(request):
             is_gestor = True
             equipes_gestor = equipes_lideradas
 
-        if Ferias.objects.filter(funcionario=funcionario).exclude(arquivo_aviso='').exists():
+        # --- LÓGICA DE FÉRIAS ATUALIZADA ---
+        # O botão aparece se houver um registro de férias com arquivo gerado 
+        # E se a data de fim das férias ainda não passou (data_fim >= hoje).
+        hoje = timezone.now().date()
+        if Ferias.objects.filter(
+            funcionario=funcionario, 
+            data_fim__gte=hoje
+        ).exclude(arquivo_aviso='').exists():
             tem_ferias = True
+        # -----------------------------------
             
         is_campo = usuario_eh_campo(request.user)
         
@@ -189,7 +197,7 @@ def home(request):
     
     return render(request, 'core_rh/index.html', {
         'is_gestor': is_gestor or request.user.is_superuser, 
-        'equipes_lideradas': equipes_gestor, # Envia as equipes para o template
+        'equipes_lideradas': equipes_gestor,
         'can_access_rh_area': can_access_rh_area,
         'tem_ferias': tem_ferias,
         'is_campo': is_campo, 
@@ -2168,7 +2176,6 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
                 if font: cell.font = font
                 if alignment: cell.alignment = alignment
 
-    # Busca Dados
     lista_itens = []
     val_km = float(funcionario.valor_km) if funcionario.valor_km else 0.0
 
@@ -2176,29 +2183,34 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     kms = ControleKM.objects.filter(funcionario=funcionario, data__range=[dt_inicio, dt_fim]).order_by('data')
     for k in kms:
         trechos = k.trechos.all()
+        # Pega a observação salva
+        obs_texto = k.observacao if k.observacao else ""
+        
         if trechos.exists():
             for t in trechos:
-                # MUDANÇA AQUI: Usamos o link salvo no campo 'origem' (se for um link válido)
                 link = t.origem if t.origem and 'http' in t.origem else None
-                
                 origem_final = t.nome_origem if t.nome_origem else "Origem"
                 destino_final = t.nome_destino if t.nome_destino else "Destino"
                 
                 lista_itens.append({
                     'data': k.data, 'chamado': k.numero_chamado, 'tipo': 'DESLOCAMENTO',
                     'origem': origem_final, 'destino': destino_final, 'km': float(t.km),
-                    'valor': float(t.km) * val_km, 'obs': '', 'link': link,
+                    'valor': float(t.km) * val_km, 
+                    'obs': obs_texto, # Inclui a observação aqui
+                    'link': link,
                     'is_img': False, 'is_pdf': False, 'is_km': True, 'path': None
                 })
         else:
             lista_itens.append({
                 'data': k.data, 'chamado': k.numero_chamado, 'tipo': 'DESLOCAMENTO',
                 'origem': 'Registro Manual', 'destino': '-', 'km': float(k.total_km),
-                'valor': float(k.total_km) * val_km, 'obs': 'Sem rota', 'link': None,
+                'valor': float(k.total_km) * val_km, 
+                'obs': obs_texto, 
+                'link': None,
                 'is_img': False, 'is_pdf': False, 'is_km': True, 'path': None
             })
 
-    # Despesas (Mantido igual)
+    # Despesas
     despesas = DespesaDiversa.objects.filter(funcionario=funcionario, data__range=[dt_inicio, dt_fim]).order_by('data')
     for d in despesas:
         path_disk = None; url_web = None; is_pdf = False
@@ -2220,7 +2232,7 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
         })
     lista_itens.sort(key=lambda x: x['data'])
 
-    # Excel Visual (Layout e Imagens)
+    # Excel Visual (Layout e Imagens) - MANTIDO IGUAL AO ANTERIOR
     wb = Workbook()
     ws = wb.active
     ws.title = "Relatório"
@@ -2279,19 +2291,33 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     wb.create_sheet("Comprovantes"); ws_gal = wb["Comprovantes"]; ws_gal.column_dimensions['A'].width = 80; row_gal = 1
 
     for item in lista_itens:
-        vals = [item['data'].strftime('%d/%m/%Y'), item['chamado'], item['tipo'], item['obs'] if (item['is_img'] or item['is_pdf']) else item['origem'], item['destino'], item['km'] if item['km'] > 0 else "-", item['valor']]
+        # AQUI: Se for KM, obs já vem com a observação do usuário. Se for Despesa, vem a especificação.
+        obs_final = item['obs']
+        
+        vals = [item['data'].strftime('%d/%m/%Y'), item['chamado'], item['tipo'], item['origem'] if item['is_km'] else obs_final, item['destino'], item['km'] if item['km'] > 0 else "-", item['valor']]
         for col, val in enumerate(vals, 1):
             cell = ws.cell(row=current_row, column=col, value=val)
             cell.border = BORDER_ALL; cell.font = NORMAL_FONT
             cell.alignment = LEFT if col in [4, 5] else CENTER
             if col == 7: cell.number_format = 'R$ #,##0.00'
 
+        # Coluna OBS/LINK (Coluna 8)
         cell_link = ws.cell(row=current_row, column=8); cell_link.border = BORDER_ALL; cell_link.alignment = CENTER
+        
+        # Lógica de exibição da coluna 8
         if item['link']:
             txt = "Abrir PDF (Web)" if item['is_pdf'] else ("Abrir Mapa" if item['is_km'] else "Abrir Anexo")
+            # Se tiver observação E link, mostra ambos? O Excel só aceita um texto no link.
+            # Vamos concatenar se for KM
+            if item['is_km'] and obs_final:
+                txt = f"{obs_final} (Ver Mapa)"
+                
             cell_link.value = txt; cell_link.hyperlink = item['link']; cell_link.font = Font(color="0000FF", underline="single")
         elif item['is_img']:
             cell_link.value = "Ver Aba Comprovantes"; cell_link.font = Font(color="FF0000", italic=True)
+        else:
+            # Se não tem link nem imagem, mostra apenas a observação (comum em KM manual)
+            cell_link.value = obs_final if obs_final else "-"
 
         if item['path'] and os.path.exists(item['path']):
             ws_gal.cell(row=row_gal, column=1, value=f"REF: {item['data'].strftime('%d/%m')} - R$ {item['valor']} ({item['tipo']})").font = BOLD_FONT
@@ -2333,42 +2359,50 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
         semana_idx = int(semana) - 1
         cal = monthcalendar(int(ano), int(mes))
         semanas_validas = [s for s in cal if any(d != 0 for d in s)]
-        # Proteção de índice
         if semana_idx < 0: semana_idx = 0
         if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
         
         semana_lista = semanas_validas[semana_idx]
         dia_referencia = next(d for d in semana_lista if d != 0)
         data_ref = date(int(ano), int(mes), dia_referencia)
+        
         dt_inicio = data_ref - timedelta(days=data_ref.weekday())
         dt_fim = dt_inicio + timedelta(days=6)
+        
+        # Pega a semana do ano (Ex: 2, 35...)
+        semana_anual = dt_inicio.isocalendar()[1]
     except:
         messages.error(request, "Erro ao calcular datas do lote.")
         return redirect('area_gestor')
 
     equipe = get_object_or_404(Equipe, id=equipe_id)
-    # Pega funcionários da equipe (Principal ou Secundária)
     funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
 
     zip_buffer = io.BytesIO()
     count = 0
     
+    # 1. Limpa o nome da filial (Remove "Campo", espaços, etc)
+    nome_filial_limpo = equipe.nome.replace('Campo ', '').replace('campo ', '').strip().replace(' ', '')
+
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         for func in funcionarios:
-            # Verifica se tem lançamentos nessa semana
             tem_km = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
             tem_despesa = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
             
             if tem_km or tem_despesa:
-                # Gera o Excel individual usando a função auxiliar
                 wb = gerar_workbook_km(func, dt_inicio, dt_fim)
-                
                 excel_buffer = io.BytesIO()
                 wb.save(excel_buffer)
                 
-                # Nome do arquivo dentro do ZIP
-                nome_arq = f"{func.nome_completo.split()[0]}_S{semana}.xlsx"
-                zip_file.writestr(nome_arq, excel_buffer.getvalue())
+                # Nome do Funcionário (Primeiro e Segundo nome juntos)
+                partes = func.nome_completo.split()
+                nome_func = f"{partes[0]}{partes[1]}" if len(partes) > 1 else partes[0]
+                
+                # Nome do arquivo INDIVIDUAL dentro do ZIP
+                # Ex: LucasAntonio_KM_SaoPaulo_S2.xlsx
+                nome_arq_individual = f"{nome_func}_KM_{nome_filial_limpo}_S{semana_anual}.xlsx"
+                
+                zip_file.writestr(nome_arq_individual, excel_buffer.getvalue())
                 count += 1
     
     if count == 0:
@@ -2377,10 +2411,13 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
 
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer, content_type='application/zip')
-    response['Content-Disposition'] = f'attachment; filename="Lote_{equipe.nome}_S{semana}.zip"'
+    
+    # 2. Nome do arquivo ZIP final
+    # Ex: Lote_KM_SaoPaulo_S2.zip
+    nome_zip = f"Lote_KM_{nome_filial_limpo}_S{semana_anual}.zip"
+    
+    response['Content-Disposition'] = f'attachment; filename="{nome_zip}"'
     return response
-
-# --- APROVAÇÃO EM LOTE (NOVO) ---
 @login_required
 def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
     from datetime import date, timedelta
@@ -2457,31 +2494,29 @@ def registro_km_view(request):
     funcionario = request.user.funcionario
 
     if request.method == 'POST':
-        # Pega listas de dados (nomes dos inputs agora têm [])
+        # Pega as listas de dados
         datas = request.POST.getlist('data_viagem[]')
         chamados = request.POST.getlist('numero_chamado[]')
         origens = request.POST.getlist('nome_origem[]')
         destinos = request.POST.getlist('nome_destino[]')
         kms_lista = request.POST.getlist('km_manual[]')
         urls = request.POST.getlist('google_url[]')
+        observacoes = request.POST.getlist('observacao[]') # NOVO CAMPO
         
         saved_count = 0
         
         for i in range(len(datas)):
             try:
-                # Validação básica
                 if not datas[i] or not kms_lista[i]:
                     continue
 
                 data_final = datetime.strptime(datas[i], '%Y-%m-%d').date()
                 
-                # --- TRAVA DE SEGURANÇA ---
                 if is_periodo_travado(funcionario, data_final):
-                    messages.error(request, f"ERRO: Data {datas[i]} pertence a uma semana já fechada. Item ignorado.")
                     continue
-                # --------------------------
 
                 km_final = float(kms_lista[i].replace(',', '.'))
+                obs_final = observacoes[i] if i < len(observacoes) else "" # Pega obs correspondente
                 
                 if km_final > 0:
                     with transaction.atomic():
@@ -2490,6 +2525,7 @@ def registro_km_view(request):
                             data=data_final, 
                             total_km=km_final, 
                             numero_chamado=chamados[i], 
+                            observacao=obs_final, # SALVA A OBS
                             status='Pendente'
                         )
                         TrechoKM.objects.create(
@@ -2507,14 +2543,11 @@ def registro_km_view(request):
 
         if saved_count > 0:
             messages.success(request, f"{saved_count} rotas registradas com sucesso!")
-        else:
-            if not messages.get_messages(request):
-                messages.warning(request, "Nenhum dado válido para salvar.")
-            
+        
         return redirect('registro_km')
     
     # GET: Carrega histórico
-    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:50] # Aumentei limite
+    kms = ControleKM.objects.filter(funcionario=funcionario).order_by('-data')[:50]
     despesas = DespesaDiversa.objects.filter(funcionario=funcionario).order_by('-data')[:50]
     
     historico = []
@@ -2522,7 +2555,8 @@ def registro_km_view(request):
         historico.append({
             'id': k.id, 'data': k.data, 'numero_chamado': k.numero_chamado, 
             'is_km': True, 'trechos': k.trechos.all(), 'total_km': k.total_km, 
-            'valor': None, 'status': k.status, 'nota_recusa': k.nota_recusa
+            'valor': None, 'status': k.status, 'nota_recusa': k.nota_recusa,
+            'observacao': k.observacao # Passa para o template
         })
     for d in despesas:
         historico.append({
@@ -2535,8 +2569,9 @@ def registro_km_view(request):
     historico.sort(key=lambda x: x['data'], reverse=True)
     return render(request, 'core_rh/registro_km.html', {'historico': historico, 'funcionario': funcionario})
 @login_required
+# --- DOWNLOAD INDIVIDUAL EXCEL (ATUALIZADO) ---
+@login_required
 def baixar_relatorio_excel(request, func_id=None):
-    # Essa view agora é apenas uma "casca" que chama a função geradora
     if func_id and (request.user.is_staff or usuario_eh_rh(request.user)):
         funcionario = get_object_or_404(Funcionario, id=func_id)
     else:
@@ -2550,6 +2585,7 @@ def baixar_relatorio_excel(request, func_id=None):
         semana_param = request.GET.get('semana')
     except: ano, mes, semana_param = hoje.year, hoje.month, None
 
+    # Calcula datas (Lógica mantida)
     if semana_param:
         try:
             semana_idx = int(semana_param) - 1
@@ -2568,15 +2604,38 @@ def baixar_relatorio_excel(request, func_id=None):
     else:
         dt_inicio = date(ano, mes, 1); dt_fim = date(ano, mes, monthrange(ano, mes)[1])
 
-    # CHAMA A FUNÇÃO AUXILIAR
     wb = gerar_workbook_km(funcionario, dt_inicio, dt_fim)
     
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    nome_arq = f"Relatorio_S{dt_inicio.strftime('%W')}_{dt_inicio.strftime('%d%m')}.xlsx"
+    
+    # --- NOVA LÓGICA DE NOME DA FILIAL ---
+    # Prioridade: Equipe Secundária que tenha "Campo" no nome
+    equipe_filial = funcionario.outras_equipes.filter(nome__icontains="Campo").first()
+    
+    if equipe_filial:
+        raw_name = equipe_filial.nome
+    elif funcionario.equipe:
+        raw_name = funcionario.equipe.nome
+    else:
+        raw_name = "Geral"
+        
+    # Limpa o nome: Remove "Campo ", "campo " e retira espaços
+    nome_filial = raw_name.replace('Campo ', '').replace('campo ', '').strip().replace(' ', '')
+    
+    # --- FORMATAÇÃO DO NOME DO ARQUIVO ---
+    # 1. Nome e Sobrenome
+    partes = funcionario.nome_completo.split()
+    nome_func = f"{partes[0]}{partes[1]}" if len(partes) > 1 else partes[0]
+    
+    # 2. Semana do Ano
+    semana_anual = dt_inicio.isocalendar()[1]
+    
+    # Ex: LucasAntonio_KM_SaoPaulo_S2.xlsx
+    nome_arq = f"{nome_func}_KM_{nome_filial}_S{semana_anual}.xlsx"
+    
     response['Content-Disposition'] = f'attachment; filename="{nome_arq}"'
     wb.save(response)
     return response
-
 @login_required
 def avancar_status_km(request, controle_id):
     km = get_object_or_404(ControleKM, id=controle_id)
@@ -3279,11 +3338,9 @@ class CustomPasswordResetDoneView(PasswordResetDoneView):
 def editar_km_view(request):
     if request.method == 'POST':
         km_id = request.POST.get('km_id')
-        
         try:
             km = ControleKM.objects.get(id=km_id, funcionario__usuario=request.user)
             
-            # Só permite editar se Pendente ou Rejeitado
             if km.status not in ['Pendente', 'Rejeitado']:
                 messages.error(request, "Não é possível editar este registro (Status bloqueado).")
                 return redirect('registro_km')
@@ -3291,13 +3348,12 @@ def editar_km_view(request):
             km.data = request.POST.get('data_viagem')
             km.numero_chamado = request.POST.get('numero_chamado')
             km.total_km = float(request.POST.get('km_manual').replace(',', '.'))
+            km.observacao = request.POST.get('observacao') # EDITA OBS
             
-            # Ao editar, volta para Pendente e limpa a nota
             km.status = 'Pendente'
             km.nota_recusa = None 
             km.save()
             
-            # Atualiza o Trecho (assumindo 1 trecho por controle no modelo atual)
             trecho = km.trechos.first()
             if trecho:
                 trecho.nome_origem = request.POST.get('nome_origem')

@@ -306,10 +306,10 @@ class Atestado(models.Model):
 class ControleKM(models.Model):
     STATUS_CHOICES = [
         ('Pendente', 'Pendente'),
-        ('Aprovado_Regional', 'Aprovado Regional'), # 1ª Aprovação
-        ('Aprovado_Matriz', 'Aprovado Matriz'),     # 2ª Aprovação (Grupo Gestão)
-        ('Aprovado_Financeiro', 'Aprovado Financeiro'), # 3ª Aprovação (Grupo Financeiro)
-        ('Pago', 'Pago'),                           # Final (Grupo Financeiro)
+        ('Aprovado_Regional', 'Aprovado Regional'),
+        ('Aprovado_Matriz', 'Aprovado Matriz'),
+        ('Aprovado_Financeiro', 'Aprovado Financeiro'),
+        ('Pago', 'Pago'),
         ('Rejeitado', 'Rejeitado'),
     ]
 
@@ -317,13 +317,17 @@ class ControleKM(models.Model):
     data = models.DateField()
     total_km = models.DecimalField(max_digits=8, decimal_places=2)
     
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pendente') # Aumentei max_length por segurança
+    # NOVO CAMPO
+    observacao = models.CharField("Observação", max_length=255, blank=True, null=True) 
     
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pendente')
     created_at = models.DateTimeField(auto_now_add=True)
     numero_chamado = models.CharField(max_length=50, null=True, blank=True, verbose_name="Nº Chamado")
     nota_recusa = models.TextField("Motivo da Recusa", blank=True, null=True)
+
     def __str__(self):
         return f"{self.funcionario.nome_completo} - {self.data}"
+
 class DespesaDiversa(models.Model):
     TIPOS = [
         ('Estacionamento', 'Estacionamento'),

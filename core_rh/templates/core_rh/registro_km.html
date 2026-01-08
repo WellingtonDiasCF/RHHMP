@@ -57,6 +57,9 @@
         .badge-soft-warning { background-color: #fef3c7; color: #b45309; }
         .badge-soft-danger  { background-color: #fee2e2; color: #b91c1c; }
         .badge-soft-secondary { background-color: #f1f5f9; color: #475569; }
+        
+        /* Loading overlay para o CEP */
+        .loading-overlay { position: absolute; right: 10px; top: 38px; display: none; }
     </style>
     <link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
 </head>
@@ -148,9 +151,13 @@
                                             <label class="fw-bold small mb-1 text-success">KM Total</label>
                                             <input type="number" step="0.1" name="km_manual[]" class="form-control form-control-custom border-success" placeholder="Ex: 15.5" required>
                                         </div>
-                                        <div class="col-md-9">
+                                        <div class="col-md-5">
                                             <label class="fw-bold small mb-1 text-primary"><i class="fab fa-google me-1"></i> Link Google Maps</label>
-                                            <input type="text" name="google_url[]" class="form-control form-control-custom" placeholder="https://maps.google.com..." required>
+                                            <input type="text" name="google_url[]" class="form-control form-control-custom" placeholder="http://maps.google.com/..." required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="fw-bold small mb-1">Observação</label>
+                                            <input type="text" name="observacao[]" class="form-control form-control-custom" placeholder="Opcional">
                                         </div>
                                     </div>
                                     </div>
@@ -230,6 +237,9 @@
                                             {% else %}
                                                 <span class="small">Rota Manual</span>
                                             {% endif %}
+                                            {% if item.observacao %}
+                                                <div class="small text-muted fst-italic mt-1"><i class="fas fa-comment me-1"></i> {{ item.observacao }}</div>
+                                            {% endif %}
                                         {% endif %}
                                         
                                         {% if item.status == 'Rejeitado' and item.nota_recusa %}
@@ -258,7 +268,7 @@
                                         {% if item.status == 'Pendente' or item.status == 'Rejeitado' %}
                                             {% if item.is_km %}
                                                 <button type="button" class="btn btn-sm btn-outline-primary border rounded-circle" 
-                                                        onclick="abrirModalEditar('{{ item.id }}', '{{ item.data|date:'Y-m-d' }}', '{{ item.numero_chamado }}', '{{ item.total_km }}', '{{ item.trechos.first.nome_origem }}', '{{ item.trechos.first.nome_destino }}', '{{ item.trechos.first.origem }}')" 
+                                                        onclick="abrirModalEditar('{{ item.id }}', '{{ item.data|date:'Y-m-d' }}', '{{ item.numero_chamado }}', '{{ item.total_km }}', '{{ item.trechos.first.nome_origem }}', '{{ item.trechos.first.nome_destino }}', '{{ item.trechos.first.origem }}', '{{ item.observacao|default:'' }}')" 
                                                         title="Editar">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
@@ -298,9 +308,10 @@
                             {% csrf_token %}
                             <h6 class="text-secondary fw-bold small text-uppercase mb-3 mt-2 border-bottom pb-2">Endereço</h6>
                             <div class="row g-3 mb-4">
-                                <div class="col-md-3">
+                                <div class="col-md-3 position-relative">
                                     <label class="small fw-bold">CEP</label>
                                     <input type="text" name="cep" id="id_cep" class="form-control form-control-custom" value="{{ funcionario.cep|default:'' }}" maxlength="9" placeholder="00000-000">
+                                    <div class="loading-overlay" id="cep-loading"><i class="fas fa-spinner fa-spin text-primary"></i></div>
                                 </div>
                                 <div class="col-md-5"><label class="small fw-bold">Endereço</label><input type="text" name="endereco" id="id_endereco" class="form-control form-control-custom" value="{{ funcionario.endereco|default:'' }}"></div>
                                 <div class="col-md-4"><label class="small fw-bold">Bairro</label><input type="text" name="bairro" id="id_bairro" class="form-control form-control-custom" value="{{ funcionario.bairro|default:'' }}"></div>
@@ -438,6 +449,10 @@
                             <label class="small fw-bold text-primary">Link Maps</label>
                             <input type="text" name="google_url" id="edit_url" class="form-control">
                         </div>
+                        <div class="col-md-12">
+                            <label class="small fw-bold">Observação</label>
+                            <input type="text" name="observacao" id="edit_obs" class="form-control">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -532,7 +547,8 @@
             new bootstrap.Modal(document.getElementById('modalRepetirRota')).show();
         }
 
-        function abrirModalEditar(id, data, chamado, km, origem, destino, url) {
+        // Atualizado para receber observação
+        function abrirModalEditar(id, data, chamado, km, origem, destino, url, obs) {
             document.getElementById('edit_km_id').value = id;
             document.getElementById('edit_data').value = data;
             document.getElementById('edit_chamado').value = chamado;
@@ -540,6 +556,7 @@
             document.getElementById('edit_origem').value = origem;
             document.getElementById('edit_destino').value = destino;
             document.getElementById('edit_url').value = url;
+            document.getElementById('edit_obs').value = obs; // Carrega Obs
             new bootstrap.Modal(document.getElementById('modalEditarKM')).show();
         }
 
@@ -551,56 +568,32 @@
             currentMonday = getMonday(new Date());
             updateWeekDisplay();
             
-            // --- SCRIPT DO CEP (BASEADO NO cep_admin.js DO ADMIN) ---
-            
-            // Mapeamento dos IDs gerados pelo Django Admin (compatível com os IDs do template)
+            // --- SCRIPT DO CEP ---
             const cepInput = document.getElementById('id_cep');
             const ruaInput = document.getElementById('id_endereco');
             const bairroInput = document.getElementById('id_bairro');
             const cidadeInput = document.getElementById('id_cidade');
             const estadoInput = document.getElementById('id_estado');
-            const localTrabalhoInput = document.getElementById('id_local_trabalho_estado'); // Não existe neste template, mas mantido para compatibilidade
-
-            // Mapeamento de Sigla para Nome Completo
-            const estadosNomes = {
-                'AC': 'Acre', 'AL': 'Alagoas', 'AP': 'Amapá', 'AM': 'Amazonas', 'BA': 'Bahia',
-                'CE': 'Ceará', 'DF': 'Distrito Federal', 'ES': 'Espírito Santo', 'GO': 'Goiás',
-                'MA': 'Maranhão', 'MT': 'Mato Grosso', 'MS': 'Mato Grosso do Sul', 'MG': 'Minas Gerais',
-                'PA': 'Pará', 'PB': 'Paraíba', 'PR': 'Paraná', 'PE': 'Pernambuco', 'PI': 'Piauí',
-                'RJ': 'Rio de Janeiro', 'RN': 'Rio Grande do Norte', 'RS': 'Rio Grande do Sul',
-                'RO': 'Rondônia', 'RR': 'Roraima', 'SC': 'Santa Catarina', 'SP': 'São Paulo',
-                'SE': 'Sergipe', 'TO': 'Tocantins'
-            };
 
             if (cepInput) {
                 cepInput.addEventListener('blur', function() {
-                    // Remove tudo que não é número
                     let cep = this.value.replace(/\D/g, '');
-
                     if (cep.length === 8) {
-                        // Consulta a API ViaCEP
+                        document.getElementById('cep-loading').style.display = 'block';
                         fetch(`https://viacep.com.br/ws/${cep}/json/`)
                             .then(response => response.json())
                             .then(data => {
                                 if (!data.erro) {
-                                    // Preenche os campos de endereço
                                     if(ruaInput) ruaInput.value = data.logradouro;
                                     if(bairroInput) bairroInput.value = data.bairro;
                                     if(cidadeInput) cidadeInput.value = data.localidade;
                                     if(estadoInput) estadoInput.value = data.uf;
-
-                                    // Define o Local de Trabalho com o nome do Estado (Se o campo existir)
-                                    if(localTrabalhoInput) {
-                                        const nomeCompleto = estadosNomes[data.uf] || data.uf;
-                                        localTrabalhoInput.value = nomeCompleto;
-                                    }
                                 } else {
                                     alert("CEP não encontrado.");
                                 }
                             })
-                            .catch(error => {
-                                console.error('Erro na busca:', error);
-                            });
+                            .catch(error => console.error('Erro:', error))
+                            .finally(() => document.getElementById('cep-loading').style.display = 'none');
                     }
                 });
             }

@@ -3,6 +3,7 @@ import io
 from django.contrib import admin
 from django.contrib.auth.models import User, Group
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe 
 from django import forms
 from django.urls import reverse, path
 from django.shortcuts import redirect, render
@@ -12,14 +13,13 @@ import pdfplumber
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-# --- IMPORTS DOS MODELS (Adicionados ControleKM e TrechoKM) ---
+# --- IMPORTS DOS MODELS ---
 from .models import (
     Funcionario, RegistroPonto, Cargo, Equipe, 
     Ferias, Contracheque, Atestado, ControleKM, TrechoKM
 )
 from .forms import UploadLoteContrachequeForm
 
-# Tenta importar pypdf de forma segura
 try:
     from pypdf import PdfReader, PdfWriter
 except ImportError:
@@ -33,19 +33,15 @@ def is_rh_member(user):
     if not user or not user.is_authenticated: return False
     if user.is_superuser: return True
     
-    # 1. Verifica Grupo do Django
     if user.groups.filter(name='RH').exists(): return True
 
-    # 2. Verifica Equipe do Funcionário
     try:
         if hasattr(user, 'funcionario'):
             func = user.funcionario
             rh_names = ['RH', 'Recursos Humanos', 'Gestão de Pessoas']
             
-            # Equipe Principal
             if func.equipe and func.equipe.nome in rh_names: return True
             
-            # Equipes Secundárias
             if func.outras_equipes.filter(nome__in=rh_names).exists(): return True
     except Exception:
         pass
@@ -53,7 +49,6 @@ def is_rh_member(user):
     return False
 
 class RHAccessMixin:
-    """Libera acesso total para quem é do RH, independente das flags do Django Admin"""
     def has_module_permission(self, request):
         return is_rh_member(request.user) or super().has_module_permission(request)
 
@@ -85,12 +80,9 @@ class FuncionarioAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # --- FILTRO DE EQUIPE OCULTA ---
-        # No campo 'equipe' (Principal), mostramos apenas as NÃO ocultas
         if 'equipe' in self.fields:
             self.fields['equipe'].queryset = Equipe.objects.filter(oculta=False)
             
-        # No campo 'outras_equipes' (Secundárias), mostramos TODAS (ou apenas as ocultas, se preferir)
         if 'outras_equipes' in self.fields:
             self.fields['outras_equipes'].queryset = Equipe.objects.all()
 
@@ -102,6 +94,8 @@ class FuncionarioAdminForm(forms.ModelForm):
 
 # --- ADMINS ---
 
+# --- ADMINS ---
+
 @admin.register(Funcionario)
 class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     form = FuncionarioAdminForm
@@ -110,8 +104,10 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     search_fields = ('nome_completo', 'cpf', 'usuario__username', 'email')
     filter_horizontal = ('outras_equipes',)
     
+    # --- AQUI: Adicionado o admin_realtime_search.js ---
     class Media:
-        js = ('js/cep_admin.js',)
+        js = ('js/cep_admin.js', 'js/admin_realtime_search.js',)
+    # ---------------------------------------------------
 
     fieldsets = (
         ('🔐 Acesso', {'fields': ('username', 'password', 'email', 'is_active', 'primeiro_acesso')}),
@@ -129,6 +125,7 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     
     get_local_trabalho.short_description = 'Local de Trabalho'
 
+    # ... (métodos changelist_view e save_model mantidos iguais) ...
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         estados = Funcionario.objects.exclude(local_trabalho_estado__isnull=True).exclude(local_trabalho_estado='').values_list('local_trabalho_estado', flat=True).distinct().order_by('local_trabalho_estado')
@@ -145,6 +142,7 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
     def save_model(self, request, obj, form, change):
+        # ... (seu código save_model original aqui) ...
         username = form.cleaned_data['username']
         email = form.cleaned_data['email']
         password = form.cleaned_data['password']
@@ -185,13 +183,16 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
 
 @admin.register(Equipe)
 class EquipeAdmin(RHAccessMixin, admin.ModelAdmin):
-    # Adicione 'oculta' para você poder filtrar se precisar ver as ocultas depois
     list_display = ('nome', 'local_trabalho', 'listar_gestores', 'oculta')
     search_fields = ('nome', 'local_trabalho')
     list_filter = ('local_trabalho', 'oculta') 
     filter_horizontal = ('gestores',)
     
-    # Campo para editar
+    # --- AQUI: Adicionada a classe Media com o script ---
+    class Media:
+        js = ('js/admin_realtime_search.js',)
+    # ----------------------------------------------------
+    
     fields = ('nome', 'local_trabalho', 'gestor', 'gestores', 'oculta')
 
     def listar_gestores(self, obj):
@@ -232,7 +233,7 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
 
     def acoes_rh(self, obj):
         if obj.status == 'Concluido':
-            return format_html('<span style="color:green; font-weight:bold;">✅ Concluído</span>')
+            return mark_safe('<span style="color:green; font-weight:bold;">✅ Concluído</span>')
         
         if obj.aviso_assinado or obj.recibo_assinado:
             url = reverse('admin:ferias_aprovar', args=[obj.pk])
@@ -241,7 +242,7 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
                    href="{}">Aprovar</a>''',
                 url
             )
-        return format_html('<span style="color:#999;">Aguardando Docs</span>')
+        return mark_safe('<span style="color:#999;">Aguardando Docs</span>')
     
     acoes_rh.short_description = "Aprovação"
     acoes_rh.allow_tags = True
@@ -261,10 +262,15 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
             self.message_user(request, f"Férias de {ferias.funcionario.nome_completo} aprovadas e concluídas com sucesso!", level=messages.SUCCESS)
         return redirect(request.META.get('HTTP_REFERER', 'admin:core_rh_ferias_changelist'))
 
+    # Redireciona para Funcionários após excluir
+    def response_delete(self, request, obj_display, obj_id):
+        messages.success(request, f"O registro de férias de {obj_display} foi excluído com sucesso.")
+        return redirect('admin:core_rh_funcionario_changelist')
+
     def painel_aprovacao(self, obj):
         if not obj.pk: return "Salve o registro primeiro."
         if obj.status == 'Concluido':
-            return format_html('<div style="color:green; font-weight:bold; font-size:14px; padding:10px; border:1px solid green; background:#eaffea; border-radius:5px;">✅ Processo Concluído</div>')
+            return mark_safe('<div style="color:green; font-weight:bold; font-size:14px; padding:10px; border:1px solid green; background:#eaffea; border-radius:5px;">✅ Processo Concluído</div>')
         
         if obj.aviso_assinado or obj.recibo_assinado:
             url = reverse('admin:ferias_aprovar', args=[obj.pk])
@@ -272,7 +278,7 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
                 '''<a class="button" style="background-color: #28a745; color: white; font-weight: bold; padding: 10px 20px; border-radius: 5px; text-transform: uppercase;" href="{}"><i class="fas fa-check-circle"></i> Aprovar e Concluir Férias</a>''',
                 url
             )
-        return format_html('<span style="color:#999; font-style:italic;">Aguardando envio de documentos assinados pelo colaborador...</span>')
+        return mark_safe('<span style="color:#999; font-style:italic;">Aguardando envio de documentos assinados pelo colaborador...</span>')
     
     painel_aprovacao.short_description = "Ação do RH"
     painel_aprovacao.allow_tags = True
@@ -320,9 +326,9 @@ class ContrachequeAdmin(RHAccessMixin, admin.ModelAdmin):
     search_fields = ('funcionario__nome_completo', 'funcionario__matricula')
     
     def referencia(self, obj): return f"{obj.get_mes_display()}/{obj.ano}"
-    def status_envio(self, obj): return format_html('<span style="color: green;"><i class="fas fa-check-circle"></i> Enviado</span>')
+    def status_envio(self, obj): return mark_safe('<span style="color: green;"><i class="fas fa-check-circle"></i> Enviado</span>')
     def status_assinatura(self, obj):
-        return format_html('<span style="color: green; font-weight: bold;"><i class="fas fa-file-signature"></i> Assinado</span>') if obj.data_ciencia else format_html('<span style="color: orange;"><i class="fas fa-clock"></i> Pendente</span>')
+        return mark_safe('<span style="color: green; font-weight: bold;"><i class="fas fa-file-signature"></i> Assinado</span>') if obj.data_ciencia else mark_safe('<span style="color: orange;"><i class="fas fa-clock"></i> Pendente</span>')
     def link_arquivo(self, obj):
         return format_html('<a href="{}" target="_blank" class="button" style="padding:5px 10px;">Ver PDF</a>', obj.arquivo.url) if obj.arquivo else "-"
 
