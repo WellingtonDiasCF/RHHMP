@@ -35,6 +35,11 @@ from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import NamedStyle
 from collections import defaultdict
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from django.views.decorators.http import require_POST
 # Utils Extras
 import holidays 
 try:
@@ -595,18 +600,10 @@ def folha_ponto_view(request):
 # --- SUBSTITUA A FUNÇÃO area_gestor_view INTEIRA POR ESTA ---
 @login_required
 def area_gestor_view(request):
-    # --- IMPORTS NECESSÁRIOS ---
-    from datetime import date, timedelta, datetime
+    # --- IMPORTS NECESSÁRIOS (Idealmente no topo do arquivo) ---
+    from datetime import date, timedelta
     from calendar import monthcalendar
     from django.db.models import Q
-    
-    # Constante de Meses (Caso não esteja no topo do arquivo)
-    MESES_PT = {
-        1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
-        5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
-        9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
-    }
-
     try:
         gestor = Funcionario.objects.get(usuario=request.user)
         # Pega TODAS as equipes
@@ -625,7 +622,6 @@ def area_gestor_view(request):
     equipes_km = todas_equipes.filter(oculta=True)
 
     # --- LÓGICA DE DATAS (COMPETÊNCIA) ---
-    # Tenta usar a função global, se não existir, usa a data atual
     try:
         mes_real, ano_real = get_competencia_atual()
     except NameError:
@@ -639,8 +635,15 @@ def area_gestor_view(request):
         mes, ano = mes_real, ano_real
 
     # Navegação Meses
-    mes_ant, ano_ant = (12, ano - 1) if mes == 1 else (mes - 1, ano)
-    mes_prox, ano_prox = (1, ano + 1) if mes == 12 else (mes + 1, ano)
+    if mes == 1:
+        mes_ant, ano_ant = 12, ano - 1
+    else:
+        mes_ant, ano_ant = mes - 1, ano
+        
+    if mes == 12:
+        mes_prox, ano_prox = 1, ano + 1
+    else:
+        mes_prox, ano_prox = mes + 1, ano
 
     nav_anterior = {'mes': mes_ant, 'ano': ano_ant}
     nav_proximo = {'mes': mes_prox, 'ano': ano_prox}
@@ -653,7 +656,6 @@ def area_gestor_view(request):
         try:
             data_inicio, data_fim = get_datas_competencia(mes, ano)
         except NameError:
-            # Fallback se a função não existir
             data_inicio = date(ano, mes, 1)
             import calendar
             last_day = calendar.monthrange(ano, mes)[1]
@@ -682,11 +684,10 @@ def area_gestor_view(request):
     # ==========================================
     # ABA 2: KM (Equipes Ocultas)
     # ==========================================
-    # INICIALIZAÇÃO DE VARIÁVEIS (CRÍTICO: Evita erro se equipes_km for vazio)
     semanas_do_mes = []
     dados_km_semana_atual = []
     equipe_km_selecionada = None
-    semana_selecionada = 1 # Valor padrão
+    semana_selecionada = 1
     
     if equipes_km.exists():
         # Seleciona equipe
@@ -728,7 +729,7 @@ def area_gestor_view(request):
             
             count_sem += 1
 
-        # Garante que temos um range, senão pega a primeira semana calculada
+        # Fallback se não achar a semana
         if not range_semana_atual and semanas_do_mes:
             range_semana_atual = (semanas_do_mes[0]['inicio'], semanas_do_mes[0]['fim'])
 
@@ -744,12 +745,21 @@ def area_gestor_view(request):
                 kms = ControleKM.objects.filter(funcionario=f, data__range=[ini, fim])
                 despesas = DespesaDiversa.objects.filter(funcionario=f, data__range=[ini, fim])
                 
-                total_km = sum(k.total_km for k in kms)
+                total_km_val = sum(k.total_km for k in kms)
+                total_despesas_val = sum(d.valor for d in despesas)
+                
                 tem_algo = kms.exists() or despesas.exists()
                 status_geral = "Vazio"
                 ids_km = []
                 
+                valor_total_financeiro = 0.0
+
                 if tem_algo:
+                    # Cálculo Financeiro
+                    fator = float(f.valor_km) if f.valor_km and f.valor_km > 0 else 1.20
+                    valor_total_financeiro = (float(total_km_val) * fator) + float(total_despesas_val)
+
+                    # Status
                     st_km = list(kms.values_list('status', flat=True))
                     st_dp = list(despesas.values_list('status', flat=True))
                     todos_status = set(st_km + st_dp)
@@ -766,7 +776,8 @@ def area_gestor_view(request):
 
                 dados_km_semana_atual.append({
                     'funcionario': f,
-                    'total_km': total_km,
+                    'total_km': total_km_val,
+                    'valor_total_financeiro': valor_total_financeiro,
                     'status': status_geral,
                     'ids_km': ids_km,
                     'tem_registro': tem_algo
@@ -776,181 +787,6 @@ def area_gestor_view(request):
         'mes_atual': mes,
         'ano_atual': ano,
         'nome_mes': f"{MESES_PT.get(mes, 'Mês')}/{ano}",
-        'nav_anterior': nav_anterior, 
-        'nav_proximo': nav_proximo,
-        'equipes_ponto': equipes_ponto,
-        'lista_ponto': lista_ponto,
-        'equipes_km': equipes_km,
-        'equipe_km_selecionada': equipe_km_selecionada,
-        'semanas_do_mes': semanas_do_mes,
-        'dados_km_semana_atual': dados_km_semana_atual,
-        'semana_selecionada': semana_selecionada,
-        'is_gestao': usuario_eh_gestao(request.user),
-        'is_financeiro': usuario_eh_financeiro(request.user),        
-    })
-    try:
-        gestor = Funcionario.objects.get(usuario=request.user)
-        # Pega TODAS as equipes (exceto ocultas se não tiver permissão)
-        todas_equipes = Equipe.objects.filter(
-            Q(gestor=gestor) | Q(gestores=gestor)
-        ).distinct()
-    except Funcionario.DoesNotExist:
-        return redirect('home')
-
-    if not todas_equipes.exists() and not request.user.is_superuser:
-        return HttpResponse("Acesso negado. Você não é gestor de nenhuma equipe.")
-
-    # Separa equipes
-    equipes_ponto = todas_equipes.filter(oculta=False)
-    equipes_km = todas_equipes.filter(oculta=True)
-
-    # --- LÓGICA DE DATAS (CORRIGIDA - NAVEGAÇÃO LIVRE) ---
-    mes_real, ano_real = get_competencia_atual()
-    try:
-        mes = int(request.GET.get('mes', mes_real))
-        ano = int(request.GET.get('ano', ano_real))
-    except ValueError:
-        mes, ano = mes_real, ano_real
-
-    # Calcula Mês Anterior
-    if mes == 1:
-        mes_ant, ano_ant = 12, ano - 1
-    else:
-        mes_ant, ano_ant = mes - 1, ano
-        
-    # Calcula Próximo Mês
-    if mes == 12:
-        mes_prox, ano_prox = 1, ano + 1
-    else:
-        mes_prox, ano_prox = mes + 1, ano
-
-    nav_anterior = {'mes': mes_ant, 'ano': ano_ant}
-    nav_proximo = {'mes': mes_prox, 'ano': ano_prox}
-
-    # ==========================================
-    # LÓGICA DA ABA 1: PONTO
-    # ==========================================
-    data_inicio, data_fim = get_datas_competencia(mes, ano)
-    
-    funcionarios_ponto = Funcionario.objects.filter(
-        Q(equipe__in=equipes_ponto) | Q(outras_equipes__in=equipes_ponto)
-    ).exclude(id=gestor.id).distinct()
-    
-    lista_ponto = []
-    for func in funcionarios_ponto:
-        pontos = RegistroPonto.objects.filter(funcionario=func, data__range=[data_inicio, data_fim])
-        assinado_func = pontos.filter(assinado_funcionario=True).exists()
-        assinado_gest = pontos.filter(assinado_gestor=True).exists()
-        ponto_com_arquivo = pontos.exclude(arquivo_anexo='').first()
-        url_arquivo = ponto_com_arquivo.arquivo_anexo.url if ponto_com_arquivo and ponto_com_arquivo.arquivo_anexo else None
-        
-        lista_ponto.append({
-            'funcionario': func,
-            'status_func': assinado_func,
-            'status_gestor': assinado_gest,
-            'pode_assinar': assinado_func and not assinado_gest,
-            'arquivo_assinado_url': url_arquivo,
-            'nome_download': f"Folha_{func.nome_completo}_{mes}_{ano}.pdf"
-        })
-
-    # ==========================================
-    # LÓGICA DA ABA 2: KM
-    # ==========================================
-    semanas_do_mes = []
-    dados_km_semana_atual = []
-    equipe_km_selecionada = None
-    semana_selecionada = 1
-    
-    if equipes_km.exists():
-        # Seleciona equipe
-        km_team_id = request.GET.get('km_team')
-        if km_team_id:
-            equipe_km_selecionada = equipes_km.filter(id=km_team_id).first()
-        if not equipe_km_selecionada:
-            equipe_km_selecionada = equipes_km.first()
-
-        # Seleciona Semana
-        try: semana_selecionada = int(request.GET.get('semana', 1))
-        except: semana_selecionada = 1
-
-        # Calcula Semanas
-        cal = monthcalendar(ano, mes)
-        count_sem = 1
-        range_semana_atual = None
-
-        for week in cal:
-            dias_validos = [d for d in week if d != 0]
-            if not dias_validos: continue
-            
-            primeiro_dia = date(ano, mes, dias_validos[0])
-            inicio_semana = primeiro_dia - timedelta(days=primeiro_dia.weekday())
-            fim_semana = inicio_semana + timedelta(days=6)
-            
-            semanas_do_mes.append({
-                'numero': count_sem,
-                'inicio': inicio_semana,
-                'fim': fim_semana,
-                'active': (count_sem == semana_selecionada)
-            })
-            
-            if count_sem == semana_selecionada:
-                range_semana_atual = (inicio_semana, fim_semana)
-            
-            count_sem += 1
-
-        # Busca Dados da Semana
-        if range_semana_atual:
-            funcs_campo = Funcionario.objects.filter(
-                Q(equipe=equipe_km_selecionada) | Q(outras_equipes=equipe_km_selecionada)
-            ).distinct().order_by('nome_completo')
-
-            ini, fim = range_semana_atual
-            
-    for f in funcs_campo:
-                kms = ControleKM.objects.filter(funcionario=f, data__range=[ini, fim])
-                despesas = DespesaDiversa.objects.filter(funcionario=f, data__range=[ini, fim])
-                
-                total_km = sum(k.total_km for k in kms)
-                tem_algo = kms.exists() or despesas.exists()
-                status_geral = "Vazio"
-                ids_km = []
-                
-                if tem_algo:
-                    # Coleta todos os status presentes nesta semana
-                    st_km = list(kms.values_list('status', flat=True))
-                    st_dp = list(despesas.values_list('status', flat=True))
-                    todos_status = set(st_km + st_dp)
-
-                    # Lógica de Prioridade para Exibição (Do mais "grave" para o mais "concluído")
-                    if 'Rejeitado' in todos_status:
-                        status_geral = 'Rejeitado'
-                    elif 'Pendente' in todos_status:
-                        status_geral = 'Pendente'
-                    elif 'Aprovado_Regional' in todos_status:
-                        status_geral = 'Aprovado_Regional'
-                    elif 'Aprovado_Matriz' in todos_status:
-                        status_geral = 'Aprovado_Matriz'
-                    elif 'Aprovado_Financeiro' in todos_status:
-                        status_geral = 'Aprovado_Financeiro'
-                    elif 'Pago' in todos_status:
-                        status_geral = 'Pago'
-                    elif 'Aprovado' in todos_status: # Suporte legado
-                        status_geral = 'Aprovado_Matriz' # Trata antigos como Matriz para avançar
-                    
-                    ids_km = list(kms.values_list('id', flat=True))
-
-                dados_km_semana_atual.append({
-                    'funcionario': f,
-                    'total_km': total_km,
-                    'status': status_geral,
-                    'ids_km': ids_km,
-                    'tem_registro': tem_algo
-                })
-
-    return render(request, 'core_rh/area_gestor.html', {
-        'mes_atual': mes,
-        'ano_atual': ano,
-        'nome_mes': f"{MESES_PT[mes]}/{ano}",
         'nav_anterior': nav_anterior, 
         'nav_proximo': nav_proximo,
         'equipes_ponto': equipes_ponto,
@@ -1367,10 +1203,8 @@ def admin_gestor_partial_view(request):
 
     # Definição das Equipes Permitidas
     if is_rh:
-        # RH vê tudo não oculto
         equipes_permitidas = Equipe.objects.filter(oculta=False).order_by('nome')
     else:
-        # Gestor vê Principal OU Secundário, excluindo ocultas
         equipes_permitidas = Equipe.objects.filter(
             Q(oculta=False) & (Q(gestor=funcionario) | Q(gestores=funcionario))
         ).distinct().order_by('nome')
@@ -1378,76 +1212,203 @@ def admin_gestor_partial_view(request):
     if not is_rh and not equipes_permitidas.exists():
         return HttpResponse('<div class="alert alert-warning">Você não gerencia nenhuma equipe ativa.</div>', status=403)
 
-    # 2. Filtros e Datas
+    # 2. Filtros e Datas (Mensais - Padrão Ponto)
     ma, aa = get_competencia_atual()
     try: 
-        m=int(request.GET.get('mes', ma))
-        a=int(request.GET.get('ano', aa))
-        mode=request.GET.get('mode', 'list')
-        eq_id=request.GET.get('equipe_id', '')
-        q=request.GET.get('q', '').strip()
-        est=request.GET.get('estado', '')
-    except: m,a,mode,eq_id,q,est = ma,aa,'list','','',''
+        m = int(request.GET.get('mes', ma))
+        a = int(request.GET.get('ano', aa))
+        mode = request.GET.get('mode', 'list')
+        eq_id = request.GET.get('equipe_id', '')
+        q = request.GET.get('q', '').strip()
+        est = request.GET.get('estado', '')
+    except: m, a, mode, eq_id, q, est = ma, aa, 'list', '', '', ''
     
+    # Navegação Mês
     mp, ap = get_competencia_anterior(m, a)
     mpr, apr = (1, a+1) if m==12 else (m+1, a)
-    nav_ant = {'mes': mp, 'ano': ap}; nav_prox = {'mes': mpr, 'ano': apr}
-    di, df = get_datas_competencia(m, a)
+    nav_ant = {'mes': mp, 'ano': ap}
+    nav_prox = {'mes': mpr, 'ano': apr}
+    
+    # Datas do Mês (Para Ponto)
+    di_mes, df_mes = get_datas_competencia(m, a)
     
     ctx = {
         'mes_atual': m, 'ano_atual': a, 
         'nome_mes': f"{MESES_PT.get(m)}/{a}", 
         'nav_anterior': nav_ant, 'nav_proximo': nav_prox, 
         'mode': mode, 'q': q, 'equipe_id': eq_id, 'estado_filtro': est,
-        'todas_equipes': equipes_permitidas # Popula o dropdown
+        'todas_equipes': equipes_permitidas,
+        'is_gestao': usuario_eh_rh(user), # Flag para botões de aprovação
+        'is_financeiro': user.groups.filter(name='Financeiro').exists() or user.is_superuser
     }
     
-    # 3. Modo Resumo (Cards)
+    # =========================================================================
+    # LÓGICA 1: GESTÃO DE PONTO (ABA 1)
+    # =========================================================================
     if mode == 'summary':
+        # Modo Cards (Resumo)
         qs_resumo = equipes_permitidas
         if q: qs_resumo = qs_resumo.filter(nome__icontains=q)
         
         res = []
         for e in qs_resumo:
             mem = Funcionario.objects.filter(Q(equipe=e)|Q(outras_equipes=e)).distinct()
-            ass = RegistroPonto.objects.filter(funcionario__in=mem, data__range=[di, df], assinado_gestor=True).values('funcionario').distinct().count()
+            ass = RegistroPonto.objects.filter(funcionario__in=mem, data__range=[di_mes, df_mes], assinado_gestor=True).values('funcionario').distinct().count()
             tot = mem.count()
             res.append({'equipe': e, 'total_membros': tot, 'total_assinados': ass, 'progresso': int(ass/tot*100) if tot>0 else 0})
         ctx['resumo_rh'] = res
         
-    # 4. Modo Lista (Tabela)
     else:
+        # Modo Lista (Tabela de Funcionários do Ponto)
         fq = Funcionario.objects.filter(usuario__is_active=True)
         if est: fq = fq.filter(local_trabalho_estado=est)
         
+        # Filtro de Equipe (Ponto)
         if eq_id: 
-            # Filtro Seguro
             if equipes_permitidas.filter(id=eq_id).exists():
                 fq = fq.filter(Q(equipe_id=eq_id)|Q(outras_equipes__id=eq_id))
             else:
                 fq = fq.none()
         else:
-            # Visão Geral das permitidas
             fq = fq.filter(Q(equipe__in=equipes_permitidas)|Q(outras_equipes__in=equipes_permitidas))
             
         if q: fq = fq.filter(nome_completo__icontains=q)
         
         lst = []
         for f in fq.distinct().order_by('nome_completo'):
-            pts = RegistroPonto.objects.filter(funcionario=f, data__range=[di, df])
+            # Verifica status do ponto no mês
+            pts = RegistroPonto.objects.filter(funcionario=f, data__range=[di_mes, df_mes])
+            tem_assinatura_func = pts.filter(assinado_funcionario=True).exists()
+            tem_assinatura_gest = pts.filter(assinado_gestor=True).exists()
+            
+            # Pega link do arquivo se existir
+            arq_url = None
+            ponto_final = pts.exclude(arquivo_anexo='').order_by('-data').first()
+            if ponto_final and ponto_final.arquivo_anexo:
+                arq_url = ponto_final.arquivo_anexo.url
+
             lst.append({
                 'funcionario': f, 
-                'status_func': pts.filter(assinado_funcionario=True).exists(), 
-                'status_gestor': pts.filter(assinado_gestor=True).exists(), 
-                'arquivo_anexo': pts.exclude(arquivo_anexo='').first().arquivo_anexo.url if pts.exclude(arquivo_anexo='').exists() else None, 
-                'nome_download': f"Folha_{f.nome_completo}_{m}_{a}.pdf", 
+                'status_func': tem_assinatura_func, 
+                'status_gestor': tem_assinatura_gest, 
+                'pode_assinar': (tem_assinatura_func and not tem_assinatura_gest),
+                'arquivo_assinado_url': arq_url, 
+                'nome_download': f"Folha_{f.nome_completo.split()[0]}_{m}_{a}.pdf", 
                 'mes': m, 'ano': a
             })
-        ctx['lista_colaboradores'] = lst
+        ctx['lista_colaboradores'] = lst # Usado na aba Ponto
+        ctx['lista_ponto'] = lst # Alias para garantir compatibilidade
         ctx['estados_disponiveis'] = fq.exclude(local_trabalho_estado__isnull=True).values_list('local_trabalho_estado', flat=True).distinct()
-        
-    return render(request, 'core_rh/includes/rh_area_moderno.html', ctx)
 
+    # =========================================================================
+    # LÓGICA 2: GESTÃO DE KM / CAMPO (ABA 2)
+    # =========================================================================
+    
+    # 1. Filtrar apenas equipes de "Campo" (Contém 'Campo' no nome)
+    equipes_km = equipes_permitidas.filter(nome__icontains="Campo")
+    ctx['equipes_km'] = equipes_km
+
+    if equipes_km.exists():
+        # 2. Definir Equipe Selecionada para KM
+        km_team_id = request.GET.get('km_team')
+        if km_team_id and equipes_km.filter(id=km_team_id).exists():
+            equipe_km_selecionada = equipes_km.get(id=km_team_id)
+        else:
+            equipe_km_selecionada = equipes_km.first()
+        
+        ctx['equipe_km_selecionada'] = equipe_km_selecionada
+
+        # 3. Calcular Semanas do Mês
+        cal = monthcalendar(a, m)
+        semanas_validas = [s for s in cal if any(d != 0 for d in s)]
+        
+        try:
+            semana_param = int(request.GET.get('semana', 1))
+        except:
+            semana_param = 1
+            
+        # Garante índice válido
+        if semana_param < 1: semana_param = 1
+        if semana_param > len(semanas_validas): semana_param = len(semanas_validas)
+
+        # Monta lista de semanas para as pílulas de navegação
+        semanas_info = []
+        dt_inicio_sem = None
+        dt_fim_sem = None
+
+        for idx, semana_lista in enumerate(semanas_validas, start=1):
+            dia_ref = next(d for d in semana_lista if d != 0)
+            data_ref = date(a, m, dia_ref)
+            # Segunda a Domingo
+            inicio = data_ref - timedelta(days=data_ref.weekday())
+            fim = inicio + timedelta(days=6)
+            
+            active = (idx == semana_param)
+            if active:
+                dt_inicio_sem = inicio
+                dt_fim_sem = fim
+            
+            semanas_info.append({
+                'numero': idx,
+                'inicio': inicio,
+                'fim': fim,
+                'active': active
+            })
+        
+        ctx['semanas_do_mes'] = semanas_info
+        ctx['semana_selecionada'] = semana_param
+
+        # 4. Buscar Dados Financeiros (KM + Despesas) da Semana Selecionada
+        funcionarios_km = Funcionario.objects.filter(Q(equipe=equipe_km_selecionada)|Q(outras_equipes=equipe_km_selecionada)).distinct().order_by('nome_completo')
+        
+        dados_km_semana = []
+        
+        for func in funcionarios_km:
+            # Filtra registros da semana específica
+            kms = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio_sem, dt_fim_sem])
+            despesas = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio_sem, dt_fim_sem])
+            
+            tem_registro = kms.exists() or despesas.exists()
+            
+            if tem_registro:
+                # Cálculos
+                total_km_val = sum(k.total_km for k in kms)
+                total_despesas_val = sum(d.valor for d in despesas)
+                
+                # Fator multiplicador (Se não tiver no func, usa 1.20)
+                fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
+                
+                # CÁLCULO FINAL: (KM * Fator) + Despesas
+                valor_total_financeiro = (float(total_km_val) * fator) + float(total_despesas_val)
+                
+                # Definição de Status Geral (Prioridade: Rejeitado > Pendente > Aprovado)
+                todos_status = list(kms.values_list('status', flat=True)) + list(despesas.values_list('status', flat=True))
+                
+                if 'Rejeitado' in todos_status: status_geral = 'Rejeitado'
+                elif 'Pendente' in todos_status: status_geral = 'Pendente'
+                elif 'Aprovado_Regional' in todos_status: status_geral = 'Aprovado_Regional'
+                elif 'Aprovado_Matriz' in todos_status: status_geral = 'Aprovado_Matriz'
+                elif 'Aprovado_Financeiro' in todos_status: status_geral = 'Aprovado_Financeiro'
+                elif 'Pago' in todos_status: status_geral = 'Pago'
+                else: status_geral = 'Vazio'
+
+                dados_km_semana.append({
+                    'funcionario': func,
+                    'tem_registro': True,
+                    'total_km': total_km_val,
+                    'valor_total_financeiro': valor_total_financeiro, # CAMPO CALCULADO
+                    'status': status_geral,
+                    'ids_km': list(kms.values_list('id', flat=True)) # Para links de ação
+                })
+            else:
+                # Opcional: Mostrar funcionários sem registro na lista?
+                # Se não quiser mostrar quem não rodou, comente o append abaixo
+                # dados_km_semana.append({'funcionario': func, 'tem_registro': False, 'status': 'Vazio'})
+                pass
+
+        ctx['dados_km_semana_atual'] = dados_km_semana
+
+    return render(request, 'core_rh/partials/admin_gestor_partial.html', ctx)
 try:
     from .models import Ferias
 except ImportError:
@@ -3368,3 +3329,123 @@ def editar_km_view(request):
             messages.error(request, f"Erro ao editar: {e}")
             
     return redirect('registro_km')
+
+@login_required
+def gerar_pdf_pagamento_equipe(request, equipe_id, ano, mes, semana):
+    # 1. Calcular datas da semana
+    try:
+        semana_idx = int(semana) - 1
+        cal = monthcalendar(int(ano), int(mes))
+        semanas_validas = [s for s in cal if any(d != 0 for d in s)]
+        if semana_idx < 0: semana_idx = 0
+        if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+        
+        semana_lista = semanas_validas[semana_idx]
+        dia_referencia = next(d for d in semana_lista if d != 0)
+        data_ref = date(int(ano), int(mes), dia_referencia)
+        dt_inicio = data_ref - timedelta(days=data_ref.weekday())
+        dt_fim = dt_inicio + timedelta(days=6)
+    except:
+        messages.error(request, "Erro na data.")
+        return redirect('area_gestor')
+
+    equipe = get_object_or_404(Equipe, id=equipe_id)
+    funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
+
+    # 2. Configurar PDF
+    response = HttpResponse(content_type='application/pdf')
+    nome_filial = equipe.nome.replace('Campo ', '').strip()
+    filename = f"Pagamento_{nome_filial}_S{dt_inicio.isocalendar()[1]}.pdf"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    doc = SimpleDocTemplate(response, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # 3. Título
+    elements.append(Paragraph(f"Relatório de Pagamento - {equipe.nome}", styles['Title']))
+    elements.append(Paragraph(f"Período: {dt_inicio.strftime('%d/%m/%Y')} a {dt_fim.strftime('%d/%m/%Y')}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # 4. Dados da Tabela (SEM COLUNA KM)
+    # Colunas: Técnico | Banco | Ag/Conta/Op | Chave PIX | Valor Total
+    data = [['Técnico', 'Banco', 'Ag/Conta/Op', 'Chave PIX', 'Valor Total (R$)']]
+    
+    total_geral = 0.0
+
+    for func in funcionarios:
+        kms = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
+        despesas = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
+        
+        total_km = sum([k.total_km for k in kms])
+        total_despesas = sum([d.valor for d in despesas])
+
+        # LÓGICA DE CÁLCULO CORRIGIDA (Padrão 1.20 se não tiver valor cadastrado)
+        fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
+        valor_final = (float(total_km) * fator) + float(total_despesas)
+
+        if valor_final > 0:
+            dados_bancarios = f"{func.banco or '-'}"
+            conta_info = f"Ag: {func.agencia or '-'} / CC: {func.conta or '-'} {func.operacao or ''}"
+            
+            data.append([
+                func.nome_completo,
+                dados_bancarios,
+                conta_info,
+                func.chave_pix or "-",
+                f"R$ {valor_final:,.2f}"
+            ])
+            total_geral += valor_final
+
+    # Linha Total
+    data.append(['', '', '', 'TOTAL DA FILIAL:', f"R$ {total_geral:,.2f}"])
+
+    # 5. Estilo da Tabela (Larguras Ajustadas para preencher o espaço sem a coluna KM)
+    # A4 Landscape largura útil aprox ~780pts.
+    # Distribuição: Técnico(230), Banco(120), Conta(170), Pix(160), Valor(100)
+    table = Table(data, colWidths=[230, 120, 170, 160, 100])
+    
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'), # Nomes à esquerda
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.beige), # Linha total
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ])
+    table.setStyle(style)
+    elements.append(table)
+
+    doc.build(elements)
+    return response
+
+@login_required
+@require_POST
+def atualizar_valor_km_equipe(request, equipe_id):
+    equipe = get_object_or_404(Equipe, id=equipe_id)
+    # Verifica permissão (Gestor da equipe ou RH)
+    if not (request.user.is_superuser or usuario_eh_rh(request.user) or equipe.gestor == request.user.funcionario or equipe.gestores.filter(id=request.user.funcionario.id).exists()):
+        messages.error(request, "Sem permissão para alterar valores desta equipe.")
+        return redirect('area_gestor')
+
+    novo_valor = request.POST.get('novo_valor_km')
+    
+    if novo_valor:
+        try:
+            # Converte virgula para ponto se necessário
+            val = float(novo_valor.replace(',', '.'))
+            
+            # Atualiza TODOS os funcionários desta equipe (Principal e Secundária)
+            funcs = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
+            updated = funcs.update(valor_km=val)
+            
+            messages.success(request, f"Valor do KM atualizado para R$ {val:.2f} em {updated} colaboradores da filial.")
+        except ValueError:
+            messages.error(request, "Valor inválido inserido.")
+    
+    # Redireciona de volta mantendo os filtros
+    return redirect(request.META.get('HTTP_REFERER', 'area_gestor'))
+

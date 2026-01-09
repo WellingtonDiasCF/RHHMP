@@ -48,6 +48,14 @@
         .form-control-custom, .form-select-custom { background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 12px 15px; border-radius: 8px; font-size: 0.95rem; }
         .form-control-custom:focus { background-color: #fff; border-color: #FF6600; box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.1); }
         
+        /* Estilo para campo bloqueado (Readonly) */
+        .form-control-custom[readonly] {
+            background-color: #e9ecef; /* Cinza claro */
+            color: #6c757d; /* Texto cinza */
+            cursor: not-allowed;
+            border-color: #dee2e6;
+        }
+
         .table-custom { border-collapse: separate; border-spacing: 0; }
         .table-custom thead th { background-color: #f8fafc; color: #64748b; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; padding: 15px 20px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
         .table-custom tbody td { padding: 18px 20px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; background: #fff; }
@@ -160,7 +168,7 @@
                                             <input type="text" name="observacao[]" class="form-control form-control-custom" placeholder="Opcional">
                                         </div>
                                     </div>
-                                    </div>
+                                </div>
                             </div>
 
                             <div class="d-flex justify-content-between align-items-center mt-3">
@@ -281,10 +289,10 @@
                                         {% endif %}
                                         
                                         {% if item.is_km %}
-                                        <button type="button" class="btn btn-sm btn-outline-secondary border rounded-circle ms-1" 
-                                                onclick="abrirModalRepetir('{{ item.id }}', '{{ item.numero_chamado }}')" title="Repetir">
-                                            <i class="fas fa-redo"></i>
-                                        </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary border rounded-circle ms-1" 
+                                                    onclick="abrirModalRepetir('{{ item.id }}', '{{ item.numero_chamado }}')" title="Repetir">
+                                                <i class="fas fa-redo"></i>
+                                            </button>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -324,8 +332,13 @@
                                 <div class="col-md-5"><label class="small fw-bold">Base</label><input type="text" name="base" class="form-control form-control-custom" value="{{ funcionario.base|default:'' }}"></div>
                                 <div class="col-md-4"><label class="small fw-bold">Veículo</label><input type="text" name="tipo_veiculo" class="form-control form-control-custom" value="{{ funcionario.tipo_veiculo|default:'' }}"></div>
                                 <div class="col-md-3">
-                                    <label class="small fw-bold text-success">Valor do KM</label>
-                                    <input type="text" name="valor_km" class="form-control form-control-custom border-success" value="{{ funcionario.valor_km|default:'0.00' }}" placeholder="R$ 0,00">
+                                    <label class="small fw-bold text-muted">Valor do KM</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border border-end-0 text-muted"><i class="fas fa-lock small"></i></span>
+                                        <input type="text" class="form-control form-control-custom border-start-0" 
+                                               value="R$ {{ funcionario.valor_km|default:'1,20' }}" 
+                                               readonly title="Valor definido pela gestão">
+                                    </div>
                                 </div>
                             </div>
 
@@ -398,7 +411,6 @@
                             </div>
                         </div>
                     </div>
-                    
                     <button type="button" class="btn btn-outline-primary btn-sm rounded-pill mt-2" onclick="adicionarDespesa()">
                         <i class="fas fa-plus me-1"></i> Adicionar Outra Despesa
                     </button>
@@ -547,7 +559,6 @@
             new bootstrap.Modal(document.getElementById('modalRepetirRota')).show();
         }
 
-        // Atualizado para receber observação
         function abrirModalEditar(id, data, chamado, km, origem, destino, url, obs) {
             document.getElementById('edit_km_id').value = id;
             document.getElementById('edit_data').value = data;
@@ -556,7 +567,7 @@
             document.getElementById('edit_origem').value = origem;
             document.getElementById('edit_destino').value = destino;
             document.getElementById('edit_url').value = url;
-            document.getElementById('edit_obs').value = obs; // Carrega Obs
+            document.getElementById('edit_obs').value = obs;
             new bootstrap.Modal(document.getElementById('modalEditarKM')).show();
         }
 
@@ -654,7 +665,7 @@
                 }
             });
 
-            document.getElementById('countBadge').innerText = visibleCount + ' visíveis';
+            document.getElementById('countBadge').innerText = visibleCount + ' itens';
             if (noDataRow) noDataRow.style.display = 'none'; 
             
             if (noResultsRow) {

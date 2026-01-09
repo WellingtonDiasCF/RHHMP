@@ -76,4 +76,6 @@ urlpatterns = [
     path('repetir-rota/', views.repetir_rota_view, name='repetir_rota_view'),
     path('resetar-status/', views.resetar_status_bugados, name='resetar_status'),
     path('gestor/relatorio/customizado/', views.gerar_relatorio_customizado, name='gerar_relatorio_customizado'),
+    path('gestao/pdf-pagamento/<int:equipe_id>/<int:ano>/<int:mes>/<int:semana>/', views.gerar_pdf_pagamento_equipe, name='gerar_pdf_pagamento_equipe'),
+    path('gestao/atualizar-km-equipe/<int:equipe_id>/', views.atualizar_valor_km_equipe, name='atualizar_valor_km_equipe'),
 ]
