@@ -2315,70 +2315,118 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
 
 # --- DOWNLOAD EM LOTE (NOVO) ---
 @login_required
+@login_required
 def baixar_lote_km(request, equipe_id, ano, mes, semana):
     try:
-        semana_idx = int(semana) - 1
-        cal = monthcalendar(int(ano), int(mes))
-        semanas_validas = [s for s in cal if any(d != 0 for d in s)]
-        if semana_idx < 0: semana_idx = 0
-        if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+        # 1. Configuração Básica e Segurança
+        equipe = get_object_or_404(Equipe, id=equipe_id)
         
-        semana_lista = semanas_validas[semana_idx]
-        dia_referencia = next(d for d in semana_lista if d != 0)
-        data_ref = date(int(ano), int(mes), dia_referencia)
-        
-        dt_inicio = data_ref - timedelta(days=data_ref.weekday())
-        dt_fim = dt_inicio + timedelta(days=6)
-        
-        # Pega a semana do ano (Ex: 2, 35...)
-        semana_anual = dt_inicio.isocalendar()[1]
-    except:
-        messages.error(request, "Erro ao calcular datas do lote.")
-        return redirect('area_gestor')
-
-    equipe = get_object_or_404(Equipe, id=equipe_id)
-    funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
-
-    zip_buffer = io.BytesIO()
-    count = 0
-    
-    # 1. Limpa o nome da filial (Remove "Campo", espaços, etc)
-    nome_filial_limpo = equipe.nome.replace('Campo ', '').replace('campo ', '').strip().replace(' ', '')
-
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for func in funcionarios:
-            tem_km = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
-            tem_despesa = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exists()
+        # 2. Cálculo das Datas da Semana (Robusto)
+        try:
+            semana_idx = int(semana) - 1
+            cal = monthcalendar(int(ano), int(mes))
+            semanas_validas = [s for s in cal if any(d != 0 for d in s)]
             
-            if tem_km or tem_despesa:
-                wb = gerar_workbook_km(func, dt_inicio, dt_fim)
-                excel_buffer = io.BytesIO()
-                wb.save(excel_buffer)
-                
-                # Nome do Funcionário (Primeiro e Segundo nome juntos)
-                partes = func.nome_completo.split()
-                nome_func = f"{partes[0]}{partes[1]}" if len(partes) > 1 else partes[0]
-                
-                # Nome do arquivo INDIVIDUAL dentro do ZIP
-                # Ex: LucasAntonio_KM_SaoPaulo_S2.xlsx
-                nome_arq_individual = f"{nome_func}_KM_{nome_filial_limpo}_S{semana_anual}.xlsx"
-                
-                zip_file.writestr(nome_arq_individual, excel_buffer.getvalue())
-                count += 1
-    
-    if count == 0:
-        messages.warning(request, "Nenhum relatório encontrado para esta semana.")
-        return redirect('area_gestor')
+            # Ajuste de limites
+            if semana_idx < 0: semana_idx = 0
+            if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
+            
+            semana_lista = semanas_validas[semana_idx]
+            dia_referencia = next(d for d in semana_lista if d != 0)
+            data_ref = date(int(ano), int(mes), dia_referencia)
+            dt_inicio = data_ref - timedelta(days=data_ref.weekday())
+            dt_fim = dt_inicio + timedelta(days=6)
+        except Exception as e:
+            print(f"Erro data: {e}")
+            messages.error(request, "Erro ao calcular data da semana.")
+            return redirect('area_gestor')
 
-    zip_buffer.seek(0)
-    response = HttpResponse(zip_buffer, content_type='application/zip')
-    
-    # 2. Nome do arquivo ZIP final
-    # Ex: Lote_KM_SaoPaulo_S2.zip
-    nome_zip = f"Lote_KM_{nome_filial_limpo}_S{semana_anual}.zip"
-    
-    response['Content-Disposition'] = f'attachment; filename="{nome_zip}"'
-    return response
+        # 3. Preparação do ZIP na Memória
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            
+            # --- A. GERAR PDF DE PAGAMENTO (Na Memória) ---
+            pdf_buffer = io.BytesIO()
+            doc = SimpleDocTemplate(pdf_buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Título do PDF
+            elements.append(Paragraph(f"Relatório de Pagamento - {equipe.nome}", styles['Title']))
+            elements.append(Paragraph(f"Semana {semana}: {dt_inicio.strftime('%d/%m')} a {dt_fim.strftime('%d/%m/%Y')}", styles['Normal']))
+            elements.append(Spacer(1, 20))
+
+            # Dados da Tabela
+            data_table = [['Técnico', 'Banco', 'Ag/Conta', 'PIX', 'Valor Total (R$)']]
+            total_geral = 0.0
+            funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
+
+            for func in funcionarios:
+                kms = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
+                despesas = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
+                
+                # Adicionar Comprovantes ao ZIP (Se houver)
+                for despesa in despesas:
+                    if despesa.comprovante:
+                        try:
+                            ext = despesa.comprovante.name.split('.')[-1]
+                            nome_arquivo = f"Comprovantes/{func.nome_completo}_{despesa.tipo_despesa}_{despesa.id}.{ext}"
+                            zip_file.writestr(nome_arquivo, despesa.comprovante.read())
+                        except:
+                            pass # Ignora erro de leitura de arquivo
+
+                # Cálculos Financeiros
+                total_km = sum([k.total_km for k in kms])
+                total_despesas = sum([d.valor for d in despesas])
+                fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
+                valor_final = (float(total_km) * fator) + float(total_despesas)
+
+                if valor_final > 0:
+                    banco_info = f"{func.banco or '-'} | {func.agencia or '-'} / {func.conta or '-'}"
+                    data_table.append([
+                        func.nome_completo,
+                        func.banco or "-",
+                        f"{func.agencia}/{func.conta}",
+                        func.chave_pix or "-",
+                        f"R$ {valor_final:,.2f}"
+                    ])
+                    total_geral += valor_final
+
+            data_table.append(['', '', '', 'TOTAL:', f"R$ {total_geral:,.2f}"])
+
+            # Estilo Tabela PDF
+            t = Table(data_table, colWidths=[200, 100, 150, 150, 100])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, -1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            elements.append(t)
+            
+            # Finaliza PDF
+            doc.build(elements)
+            
+            # Escreve o PDF no ZIP
+            nome_filial = equipe.nome.replace('Campo ', '').strip()
+            zip_file.writestr(f"Relatorio_{nome_filial}_Semana_{semana}.pdf", pdf_buffer.getvalue())
+
+        # 4. Retorna o ZIP
+        zip_buffer.seek(0)
+        response = HttpResponse(zip_buffer, content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="Lote_{equipe.nome}_S{semana}.zip"'
+        return response
+
+    except Exception as e:
+        # Log do erro no console para debug
+        print(f"ERRO 500 no ZIP: {str(e)}")
+        # Se falhar tudo, retorna erro simples para não quebrar a página
+        return HttpResponse(f"Erro ao gerar lote: {str(e)}", status=500)
 @login_required
 def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
     from datetime import date, timedelta
