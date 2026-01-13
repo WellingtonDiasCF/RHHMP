@@ -2369,90 +2369,47 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
                 if not kms.exists() and not despesas.exists():
                     continue
 
-                # --- 1. CRIAÇÃO DO EXCEL INDIVIDUAL ---
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "Relatório Semanal"
+                # --- 1. REUTILIZANDO A FUNÇÃO JÁ EXISTENTE ---
+                # Isso garante que o Excel seja idêntico ao individual
+                wb = gerar_workbook_km(func, dt_inicio, dt_fim)
+
+                # Salva o Excel na memória e escreve no ZIP
+                xls_buffer = io.BytesIO()
+                wb.save(xls_buffer)
                 
-                headers = ["Data", "Tipo", "Origem", "Destino", "KM", "Valor Unit.", "Valor Total", "Status", "Obs"]
-                ws.append(headers)
-                
-                total_func_excel = 0.0
-                fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
+                # Nome do arquivo limpo
+                nome_safe = func.nome_completo.strip().replace(' ', '_')
+                zip_file.writestr(f"Planilhas/{nome_safe}_Semana{semana}.xlsx", xls_buffer.getvalue())
 
-                # --- CORREÇÃO AQUI: Linhas de KM com Trechos ---
-                for k in kms:
-                    # Busca os trechos relacionados (origem e destino estão aqui)
-                    trechos = k.trechos.all()
-                    
-                    # Concatena caso haja múltiplos trechos no mesmo lançamento
-                    if trechos:
-                        txt_origem = " / ".join([t.nome_origem for t in trechos if t.nome_origem])
-                        txt_destino = " / ".join([t.nome_destino for t in trechos if t.nome_destino])
-                    else:
-                        txt_origem = "N/A"
-                        txt_destino = "N/A"
-
-                    val = float(k.total_km) * fator
-                    
-                    ws.append([
-                        k.data.strftime('%d/%m/%Y'),
-                        "KM Rodado",
-                        txt_origem,   # Agora usa a variável processada
-                        txt_destino,  # Agora usa a variável processada
-                        k.total_km,
-                        fator,
-                        val,
-                        k.status,
-                        k.observacao
-                    ])
-                    total_func_excel += val
-
-                # Linhas de Despesas
+                # --- 2. SALVAR ANEXOS ORIGINAIS (PDFs/Imagens) ---
+                # A função gerar_workbook_km coloca as imagens dentro do Excel, 
+                # mas aqui também salvamos os arquivos originais numa pasta para facilitar auditoria.
                 for d in despesas:
-                    ws.append([
-                        d.data_despesa.strftime('%d/%m/%Y'),
-                        f"Despesa: {d.tipo_despesa}",
-                        d.especificacao,
-                        "-",
-                        "-",
-                        "-",
-                        d.valor,
-                        d.status,
-                        "-"
-                    ])
-                    total_func_excel += float(d.valor)
-                    
-                    # Salva anexo
                     if d.comprovante:
                         try:
                             ext = d.comprovante.name.split('.')[-1]
-                            # Limpa nome para evitar erro no windows
-                            nome_limpo = func.nome_completo.replace(' ', '_').replace('/', '-')
-                            fname = f"Comprovantes/{nome_limpo}_{d.tipo_despesa}_{d.id}.{ext}"
+                            nome_limpo = func.nome_completo.strip().replace(' ', '_')
+                            fname = f"Comprovantes/{nome_limpo}_{d.tipo}_{d.id}.{ext}"
                             zip_file.writestr(fname, d.comprovante.read())
                         except: pass
 
-                ws.append([])
-                ws.append(["", "", "", "", "", "TOTAL:", total_func_excel])
+                # --- 3. CÁLCULO PARA O PDF DE RESUMO ---
+                total_km = sum([k.total_km for k in kms])
+                total_despesas = sum([d.valor for d in despesas])
+                fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
+                valor_final = (float(total_km) * fator) + float(total_despesas)
 
-                xls_buffer = io.BytesIO()
-                wb.save(xls_buffer)
-                nome_safe = func.nome_completo.replace(' ', '_')
-                zip_file.writestr(f"Planilhas/{nome_safe}_Semana{semana}.xlsx", xls_buffer.getvalue())
-
-                # --- 2. ADICIONA DADOS AO PDF GERAL ---
-                if total_func_excel > 0:
+                if valor_final > 0:
                     data_pdf.append([
                         func.nome_completo,
                         func.banco or "-",
                         f"{func.agencia}/{func.conta}",
                         func.chave_pix or "-",
-                        f"R$ {total_func_excel:,.2f}"
+                        f"R$ {valor_final:,.2f}"
                     ])
-                    total_geral_pdf += total_func_excel
+                    total_geral_pdf += valor_final
 
-            # Finaliza o PDF
+            # Finaliza o PDF de Resumo
             data_pdf.append(['', '', '', 'TOTAL GERAL:', f"R$ {total_geral_pdf:,.2f}"])
             
             t = Table(data_pdf, colWidths=[200, 100, 150, 150, 100])
@@ -2467,9 +2424,11 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
             elements.append(t)
             doc.build(elements)
             
+            # Adiciona o PDF ao ZIP
             nome_filial = equipe.nome.replace('Campo ', '').strip()
             zip_file.writestr(f"RESUMO_PAGAMENTO_{nome_filial}.pdf", pdf_buffer.getvalue())
 
+        # 3. Retorno do Arquivo ZIP
         zip_buffer.seek(0)
         response = HttpResponse(zip_buffer, content_type='application/zip')
         response['Content-Disposition'] = f'attachment; filename="Lote_{equipe.nome}_S{semana}.zip"'
@@ -2477,7 +2436,7 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
 
     except Exception as e:
         import traceback
-        traceback.print_exc() # Isso imprime o erro real no console do servidor
+        traceback.print_exc() 
         return HttpResponse(f"Erro ao gerar lote: {str(e)}", status=500)
 @login_required
 def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
