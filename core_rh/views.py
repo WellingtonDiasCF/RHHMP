@@ -1408,7 +1408,7 @@ def admin_gestor_partial_view(request):
 
         ctx['dados_km_semana_atual'] = dados_km_semana
 
-    return render(request, 'core_rh/partials/admin_gestor_partial.html', ctx)
+    return render(request, 'core_rh/includes/rh_area_moderno.html', ctx)
 try:
     from .models import Ferias
 except ImportError:

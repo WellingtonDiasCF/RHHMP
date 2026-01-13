@@ -78,7 +78,7 @@
         .nav-pills .nav-link.active { background-color: #FF6600; color: #fff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.3); }
         .nav-pills .nav-link:hover:not(.active) { background-color: #e2e8f0; color: #333; }
 
-        /* Modal */
+        /* Modal Styles */
         .modal-content { border-radius: 16px; border: 0; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .modal-header { border-bottom: 1px solid #f1f5f9; padding: 20px 25px; }
         .modal-body { padding: 25px; }
@@ -116,7 +116,7 @@
 
             <div class="bg-light p-1 rounded-pill border d-flex align-items-center">
                 {% if nav_anterior %}
-                    <a href="?mes={{ nav_anterior.mes }}&ano={{ nav_anterior.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month" title="Mês Anterior">
+                    <a href="?mes={{ nav_anterior.mes }}&ano={{ nav_anterior.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month month-nav-link" title="Mês Anterior">
                         <i class="fas fa-chevron-left"></i>
                     </a>
                 {% else %}
@@ -128,7 +128,7 @@
                 </div>
 
                 {% if nav_proximo %}
-                    <a href="?mes={{ nav_proximo.mes }}&ano={{ nav_proximo.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month" title="Próximo Mês">
+                    <a href="?mes={{ nav_proximo.mes }}&ano={{ nav_proximo.ano }}{% if equipe_km_selecionada %}&km_team={{ equipe_km_selecionada.id }}{% endif %}{% if request.GET.tab %}&tab={{ request.GET.tab }}{% endif %}" class="btn-nav-month month-nav-link" title="Próximo Mês">
                         <i class="fas fa-chevron-right"></i>
                     </a>
                 {% else %}
@@ -329,9 +329,7 @@
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-2 rounded-pill shadow-sm border">
-                    
                     <div style="width: 250px;"></div>
-
                     <ul class="nav nav-pills d-inline-flex">
                         {% for sem in semanas_do_mes %}
                             <li class="nav-item">
@@ -343,7 +341,6 @@
                             </li>
                         {% endfor %}
                     </ul>
-
                     <form action="{% url 'atualizar_valor_km_equipe' equipe_km_selecionada.id %}" method="POST" class="d-flex align-items-center gap-2 me-2" style="width: 250px; justify-content: flex-end;">
                         {% csrf_token %}
                         <span class="small fw-bold text-muted text-nowrap">Valor KM:</span>
@@ -575,23 +572,39 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-center text-muted mb-4 small">Colaborador: <strong id="modal-nome-func" class="text-dark">Nome</strong></p>
+
                     <div class="step-item">
                         <div class="step-icon">1</div>
                         <div class="flex-grow-1">
                             <small class="d-block text-uppercase fw-bold text-muted" style="font-size:0.7rem;">Download</small>
-                            <a id="btn-download-colaborador" href="#" class="text-decoration-none fw-bold text-primary"><i class="fas fa-download me-1"></i> Baixar Arquivo</a>
+                            <a id="btn-download-colaborador" href="#" class="text-decoration-none fw-bold text-primary">
+                                <i class="fas fa-download me-1"></i> Baixar Arquivo Assinado
+                            </a>
                         </div>
                     </div>
+
+                    <div class="step-item">
+                        <div class="step-icon">2</div>
+                        <div class="flex-grow-1">
+                            <small class="d-block text-uppercase fw-bold text-muted" style="font-size:0.7rem;">Gov.br</small>
+                            <a href="https://assinador.iti.br" target="_blank" class="text-decoration-none fw-bold text-dark">
+                                Assinar Externamente <i class="fas fa-external-link-alt ms-1 small"></i>
+                            </a>
+                        </div>
+                    </div>
+
                     <form id="form-assinar-gestor" action="#" method="post" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="step-item mb-4">
-                            <div class="step-icon">2</div>
+                            <div class="step-icon">3</div>
                             <div class="flex-grow-1">
                                 <small class="d-block text-uppercase fw-bold text-muted mb-1" style="font-size:0.7rem;">Upload Final</small>
                                 <input type="file" name="arquivo_gestor" accept=".pdf, .p7s" required class="form-control form-control-sm"/>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-success w-100 py-3 rounded-pill fw-bold shadow-sm"><i class="fas fa-check-circle me-2"></i> Confirmar e Enviar</button>
+                        <button type="submit" class="btn btn-success w-100 py-3 rounded-pill fw-bold shadow-sm">
+                            <i class="fas fa-check-circle me-2"></i> Confirmar e Enviar
+                        </button>
                     </form>
                 </div>
             </div>
@@ -623,6 +636,34 @@
         let modalGestor;
         document.addEventListener('DOMContentLoaded', function() {
             modalGestor = new bootstrap.Modal(document.getElementById('modalGestor'));
+            
+            // --- SCRIPT DE NAVEGAÇÃO ENTRE MESES E ABAS ---
+            const tabLinks = document.querySelectorAll('button[data-bs-toggle="tab"]');
+            const monthNavLinks = document.querySelectorAll('.month-nav-link');
+
+            function updateMonthLinks(activeTabId) {
+                let tabParam = 'ponto'; // padrão
+                if (activeTabId === 'km-tab') tabParam = 'km';
+
+                monthNavLinks.forEach(link => {
+                    const currentUrl = new URL(link.href, window.location.origin);
+                    currentUrl.searchParams.set('tab', tabParam);
+                    link.href = currentUrl.toString();
+                });
+            }
+
+            // Escuta a troca de abas
+            tabLinks.forEach(tab => {
+                tab.addEventListener('shown.bs.tab', function (event) {
+                    updateMonthLinks(event.target.id);
+                });
+            });
+
+            // Executa na carga inicial para garantir o estado correto
+            const activeTab = document.querySelector('button[data-bs-toggle="tab"].active');
+            if(activeTab) {
+                updateMonthLinks(activeTab.id);
+            }
         });
 
         function abrirModalGestor(funcId, nome, mes, ano, urlArquivoColaborador) {
