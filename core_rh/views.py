@@ -2120,6 +2120,15 @@ def excluir_despesa(request, despesa_id):
 def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     """Gera o objeto Workbook com os dados de KM/Despesas do funcionário."""
     
+    # Imports necessários dentro da função ou no topo
+    import io
+    import os
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    from openpyxl.drawing.image import Image as ExcelImage
+    from openpyxl.utils import get_column_letter
+    from PIL import Image as PILImage # Necessário para conversão
+    
     try:
         from pdf2image import convert_from_path
         HAS_PDF_CONVERTER = True
@@ -2144,7 +2153,6 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     kms = ControleKM.objects.filter(funcionario=funcionario, data__range=[dt_inicio, dt_fim]).order_by('data')
     for k in kms:
         trechos = k.trechos.all()
-        # Pega a observação salva
         obs_texto = k.observacao if k.observacao else ""
         
         if trechos.exists():
@@ -2157,7 +2165,7 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
                     'data': k.data, 'chamado': k.numero_chamado, 'tipo': 'DESLOCAMENTO',
                     'origem': origem_final, 'destino': destino_final, 'km': float(t.km),
                     'valor': float(t.km) * val_km, 
-                    'obs': obs_texto, # Inclui a observação aqui
+                    'obs': obs_texto,
                     'link': link,
                     'is_img': False, 'is_pdf': False, 'is_km': True, 'path': None
                 })
@@ -2193,7 +2201,7 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
         })
     lista_itens.sort(key=lambda x: x['data'])
 
-    # Excel Visual (Layout e Imagens) - MANTIDO IGUAL AO ANTERIOR
+    # Excel Visual
     wb = Workbook()
     ws = wb.active
     ws.title = "Relatório"
@@ -2218,7 +2226,10 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     style_range(ws, 'A1:F2', border=BORDER_ALL, fill=BLUE_DARK, font=WHITE_FONT, alignment=CENTER)
     ws.merge_cells('G1:G2'); ws['G1'] = "SEMANA"
     style_range(ws, 'G1:G2', border=BORDER_ALL, fill=BLUE_LIGHT, font=BOLD_FONT, alignment=CENTER)
-    ws.merge_cells('H1:H2'); ws['H1'] = f"{dt_inicio.isocalendar()[1]}/{dt_inicio.year}"
+    
+    ano_txt = dt_inicio.year
+    sem_txt = dt_inicio.isocalendar()[1]
+    ws.merge_cells('H1:H2'); ws['H1'] = f"{sem_txt}/{ano_txt}"
     style_range(ws, 'H1:H2', border=BORDER_ALL, font=BOLD_FONT, alignment=CENTER)
 
     labels = [
@@ -2252,9 +2263,7 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     wb.create_sheet("Comprovantes"); ws_gal = wb["Comprovantes"]; ws_gal.column_dimensions['A'].width = 80; row_gal = 1
 
     for item in lista_itens:
-        # AQUI: Se for KM, obs já vem com a observação do usuário. Se for Despesa, vem a especificação.
         obs_final = item['obs']
-        
         vals = [item['data'].strftime('%d/%m/%Y'), item['chamado'], item['tipo'], item['origem'] if item['is_km'] else obs_final, item['destino'], item['km'] if item['km'] > 0 else "-", item['valor']]
         for col, val in enumerate(vals, 1):
             cell = ws.cell(row=current_row, column=col, value=val)
@@ -2262,46 +2271,61 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
             cell.alignment = LEFT if col in [4, 5] else CENTER
             if col == 7: cell.number_format = 'R$ #,##0.00'
 
-        # Coluna OBS/LINK (Coluna 8)
         cell_link = ws.cell(row=current_row, column=8); cell_link.border = BORDER_ALL; cell_link.alignment = CENTER
-        
-        # Lógica de exibição da coluna 8
         if item['link']:
-            txt = "Abrir PDF (Web)" if item['is_pdf'] else ("Abrir Mapa" if item['is_km'] else "Abrir Anexo")
-            # Se tiver observação E link, mostra ambos? O Excel só aceita um texto no link.
-            # Vamos concatenar se for KM
-            if item['is_km'] and obs_final:
-                txt = f"{obs_final} (Ver Mapa)"
-                
+            txt = "Abrir PDF" if item['is_pdf'] else ("Ver Mapa" if item['is_km'] else "Abrir Anexo")
+            if item['is_km'] and obs_final: txt = f"{obs_final} (Ver Mapa)"
             cell_link.value = txt; cell_link.hyperlink = item['link']; cell_link.font = Font(color="0000FF", underline="single")
         elif item['is_img']:
             cell_link.value = "Ver Aba Comprovantes"; cell_link.font = Font(color="FF0000", italic=True)
         else:
-            # Se não tem link nem imagem, mostra apenas a observação (comum em KM manual)
             cell_link.value = obs_final if obs_final else "-"
 
+        # --- TRATAMENTO DE IMAGEM ROBUSTO (CORREÇÃO DO .MPO) ---
         if item['path'] and os.path.exists(item['path']):
             ws_gal.cell(row=row_gal, column=1, value=f"REF: {item['data'].strftime('%d/%m')} - R$ {item['valor']} ({item['tipo']})").font = BOLD_FONT
             row_gal += 1
-            img_to_insert = None
+            
             try:
+                img_io = None
+                
+                # Caso 1: É PDF e tem conversor instalado
                 if item['is_pdf'] and HAS_PDF_CONVERTER:
                     images = convert_from_path(item['path'], first_page=1, last_page=1)
                     if images:
-                        temp_pdf_img = os.path.join(settings.MEDIA_ROOT, f"temp_pdf_{item['data'].strftime('%d%m%H%M%S')}_{row_gal}.jpg")
-                        images[0].save(temp_pdf_img, 'JPEG')
-                        img_to_insert = ExcelImage(temp_pdf_img)
-                elif not item['is_pdf']:
-                    img_to_insert = ExcelImage(item['path'])
+                        img_io = io.BytesIO()
+                        images[0].convert('RGB').save(img_io, format='JPEG')
+                        img_io.seek(0)
 
-                if img_to_insert:
-                    base_height = 400; ratio = img_to_insert.width / img_to_insert.height
-                    img_to_insert.height = base_height; img_to_insert.width = base_height * ratio
-                    ws_gal.add_image(img_to_insert, f'A{row_gal}'); row_gal += 21
+                # Caso 2: É Imagem (JPG, PNG, MPO, WEBP...)
+                elif not item['is_pdf']:
+                    with PILImage.open(item['path']) as pil_img:
+                        # Converte TUDO para RGB (remove transparência do PNG, trata MPO, etc)
+                        rgb_im = pil_img.convert('RGB')
+                        img_io = io.BytesIO()
+                        # Salva como JPEG na memória
+                        rgb_im.save(img_io, format='JPEG', quality=85)
+                        img_io.seek(0)
+
+                if img_io:
+                    # Adiciona ao Excel a partir da memória
+                    img_to_insert = ExcelImage(img_io)
+                    # Redimensiona
+                    base_height = 400
+                    ratio = img_to_insert.width / img_to_insert.height
+                    img_to_insert.height = base_height
+                    img_to_insert.width = base_height * ratio
+                    
+                    ws_gal.add_image(img_to_insert, f'A{row_gal}')
+                    row_gal += 21
                 else:
-                    ws_gal.cell(row=row_gal, column=1, value="[Conversão indisponível]").font = Font(italic=True); row_gal += 2
+                    ws_gal.cell(row=row_gal, column=1, value="[Visualização indisponível no Excel - Use o Link]").font = Font(italic=True)
+                    row_gal += 2
+
             except Exception as e:
-                print(f"Erro imagem: {e}"); ws_gal.cell(row=row_gal, column=1, value="[Erro Imagem]").font = Font(color="FF0000"); row_gal += 2
+                print(f"Erro ao processar imagem {item['path']}: {e}")
+                ws_gal.cell(row=row_gal, column=1, value=f"[Erro ao carregar imagem: {str(e)}]").font = Font(color="FF0000")
+                row_gal += 2
 
         total_val += item['valor']; current_row += 1
 
@@ -2309,7 +2333,6 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
     style_range(ws, f'F{current_row}:G{current_row}', border=BORDER_ALL, fill=BLUE_LIGHT, font=BOLD_FONT, alignment=CENTER)
     ws.cell(row=current_row, column=7).number_format = 'R$ #,##0.00'
     return wb
-# ==============================================================================
 # BLOCO KM / DESPESAS / LOTE (Colar no lugar das funções antigas)
 # ==============================================================================
 
