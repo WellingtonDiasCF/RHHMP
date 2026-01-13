@@ -2315,19 +2315,15 @@ def gerar_workbook_km(funcionario, dt_inicio, dt_fim):
 
 # --- DOWNLOAD EM LOTE (NOVO) ---
 @login_required
-@login_required
 def baixar_lote_km(request, equipe_id, ano, mes, semana):
     try:
-        # 1. Configuração Básica e Segurança
+        # 1. Configuração e Datas
         equipe = get_object_or_404(Equipe, id=equipe_id)
         
-        # 2. Cálculo das Datas da Semana (Robusto)
         try:
             semana_idx = int(semana) - 1
             cal = monthcalendar(int(ano), int(mes))
             semanas_validas = [s for s in cal if any(d != 0 for d in s)]
-            
-            # Ajuste de limites
             if semana_idx < 0: semana_idx = 0
             if semana_idx >= len(semanas_validas): semana_idx = len(semanas_validas) - 1
             
@@ -2336,96 +2332,142 @@ def baixar_lote_km(request, equipe_id, ano, mes, semana):
             data_ref = date(int(ano), int(mes), dia_referencia)
             dt_inicio = data_ref - timedelta(days=data_ref.weekday())
             dt_fim = dt_inicio + timedelta(days=6)
-        except Exception as e:
-            print(f"Erro data: {e}")
-            messages.error(request, "Erro ao calcular data da semana.")
+        except:
+            messages.error(request, "Erro ao calcular datas.")
             return redirect('area_gestor')
 
-        # 3. Preparação do ZIP na Memória
+        # 2. Buffer do ZIP
         zip_buffer = io.BytesIO()
         
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             
-            # --- A. GERAR PDF DE PAGAMENTO (Na Memória) ---
+            # ==========================================
+            # PARTE A: PDF DE RESUMO GERAL (FINANCEIRO)
+            # ==========================================
             pdf_buffer = io.BytesIO()
             doc = SimpleDocTemplate(pdf_buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
             elements = []
             styles = getSampleStyleSheet()
 
-            # Título do PDF
-            elements.append(Paragraph(f"Relatório de Pagamento - {equipe.nome}", styles['Title']))
-            elements.append(Paragraph(f"Semana {semana}: {dt_inicio.strftime('%d/%m')} a {dt_fim.strftime('%d/%m/%Y')}", styles['Normal']))
+            elements.append(Paragraph(f"Resumo de Pagamento - {equipe.nome}", styles['Title']))
+            elements.append(Paragraph(f"Semana: {dt_inicio.strftime('%d/%m')} a {dt_fim.strftime('%d/%m/%Y')}", styles['Normal']))
             elements.append(Spacer(1, 20))
 
-            # Dados da Tabela
-            data_table = [['Técnico', 'Banco', 'Ag/Conta', 'PIX', 'Valor Total (R$)']]
-            total_geral = 0.0
+            data_pdf = [['Técnico', 'Banco', 'Ag/Conta', 'PIX', 'Total a Pagar']]
+            total_geral_pdf = 0.0
+            
             funcionarios = Funcionario.objects.filter(Q(equipe=equipe)|Q(outras_equipes=equipe)).distinct()
 
+            # ==========================================
+            # PARTE B: LOOP PARA GERAR EXCEL INDIVIDUAL
+            # ==========================================
             for func in funcionarios:
                 kms = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
                 despesas = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio, dt_fim]).exclude(status='Rejeitado')
                 
-                # Adicionar Comprovantes ao ZIP (Se houver)
-                for despesa in despesas:
-                    if despesa.comprovante:
-                        try:
-                            ext = despesa.comprovante.name.split('.')[-1]
-                            nome_arquivo = f"Comprovantes/{func.nome_completo}_{despesa.tipo_despesa}_{despesa.id}.{ext}"
-                            zip_file.writestr(nome_arquivo, despesa.comprovante.read())
-                        except:
-                            pass # Ignora erro de leitura de arquivo
+                # Se não tem nada, pula o funcionário no Excel (ou gera vazio, conforme preferir)
+                if not kms.exists() and not despesas.exists():
+                    continue
 
-                # Cálculos Financeiros
-                total_km = sum([k.total_km for k in kms])
-                total_despesas = sum([d.valor for d in despesas])
+                # --- 1. CRIAÇÃO DO EXCEL INDIVIDUAL ---
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Relatório Semanal"
+                
+                # Cabeçalho do Excel
+                headers = ["Data", "Tipo", "Origem/Detalhe", "Destino", "KM", "Valor Unit.", "Valor Total", "Status", "Obs"]
+                ws.append(headers)
+                
+                total_func_excel = 0.0
                 fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
-                valor_final = (float(total_km) * fator) + float(total_despesas)
 
-                if valor_final > 0:
-                    banco_info = f"{func.banco or '-'} | {func.agencia or '-'} / {func.conta or '-'}"
-                    data_table.append([
+                # Linhas de KM
+                for k in kms:
+                    val = float(k.total_km) * fator
+                    ws.append([
+                        k.data.strftime('%d/%m/%Y'),
+                        "KM Rodado",
+                        k.origem,
+                        k.destino,
+                        k.total_km,
+                        fator,
+                        val,
+                        k.status,
+                        k.observacao
+                    ])
+                    total_func_excel += val
+
+                # Linhas de Despesas
+                for d in despesas:
+                    ws.append([
+                        d.data_despesa.strftime('%d/%m/%Y'),
+                        f"Despesa: {d.tipo_despesa}",
+                        d.especificacao,
+                        "-",
+                        "-",
+                        "-",
+                        d.valor,
+                        d.status,
+                        "-"
+                    ])
+                    total_func_excel += float(d.valor)
+                    
+                    # Salva anexo da despesa no ZIP se existir
+                    if d.comprovante:
+                        try:
+                            ext = d.comprovante.name.split('.')[-1]
+                            fname = f"Comprovantes/{func.nome_completo}_{d.tipo_despesa}_{d.id}.{ext}"
+                            zip_file.writestr(fname, d.comprovante.read())
+                        except: pass
+
+                # Linha de Total no Excel
+                ws.append([])
+                ws.append(["", "", "", "", "", "TOTAL:", total_func_excel])
+
+                # Salva o Excel na memória e escreve no ZIP
+                xls_buffer = io.BytesIO()
+                wb.save(xls_buffer)
+                nome_safe = func.nome_completo.replace(' ', '_')
+                zip_file.writestr(f"Planilhas/{nome_safe}_Semana{semana}.xlsx", xls_buffer.getvalue())
+
+                # --- 2. ADICIONA DADOS AO PDF GERAL ---
+                if total_func_excel > 0:
+                    data_pdf.append([
                         func.nome_completo,
                         func.banco or "-",
                         f"{func.agencia}/{func.conta}",
                         func.chave_pix or "-",
-                        f"R$ {valor_final:,.2f}"
+                        f"R$ {total_func_excel:,.2f}"
                     ])
-                    total_geral += valor_final
+                    total_geral_pdf += total_func_excel
 
-            data_table.append(['', '', '', 'TOTAL:', f"R$ {total_geral:,.2f}"])
-
-            # Estilo Tabela PDF
-            t = Table(data_table, colWidths=[200, 100, 150, 150, 100])
+            # Finaliza o PDF de Resumo
+            data_pdf.append(['', '', '', 'TOTAL GERAL:', f"R$ {total_geral_pdf:,.2f}"])
+            
+            t = Table(data_pdf, colWidths=[200, 100, 150, 150, 100])
             t.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, -1), (-1, -1), colors.beige),
                 ('GRID', (0, 0), (-1, -1), 1, colors.black)
             ]))
             elements.append(t)
-            
-            # Finaliza PDF
             doc.build(elements)
             
-            # Escreve o PDF no ZIP
+            # Adiciona o PDF ao ZIP
             nome_filial = equipe.nome.replace('Campo ', '').strip()
-            zip_file.writestr(f"Relatorio_{nome_filial}_Semana_{semana}.pdf", pdf_buffer.getvalue())
+            zip_file.writestr(f"RESUMO_PAGAMENTO_{nome_filial}.pdf", pdf_buffer.getvalue())
 
-        # 4. Retorna o ZIP
+        # 3. Retorno do Arquivo ZIP
         zip_buffer.seek(0)
         response = HttpResponse(zip_buffer, content_type='application/zip')
         response['Content-Disposition'] = f'attachment; filename="Lote_{equipe.nome}_S{semana}.zip"'
         return response
 
     except Exception as e:
-        # Log do erro no console para debug
-        print(f"ERRO 500 no ZIP: {str(e)}")
-        # Se falhar tudo, retorna erro simples para não quebrar a página
+        # Mostra o erro na tela para facilitar o debug (pode remover em produção)
         return HttpResponse(f"Erro ao gerar lote: {str(e)}", status=500)
 @login_required
 def aprovar_semana_lote(request, equipe_id, ano, mes, semana):
