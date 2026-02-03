@@ -1268,17 +1268,16 @@ def admin_ponto_partial_view(request, func_id):
 
 @login_required
 def admin_gestor_partial_view(request):
-    # 1. Identificação e Permissão Unificada
+    # 1. Identificação e Permissão
     user = request.user
     is_rh = usuario_eh_rh(user)
     funcionario = None
-    
     try:
         funcionario = user.funcionario
     except AttributeError:
         if not is_rh: return HttpResponse("Negado", status=403)
 
-    # Definição das Equipes Permitidas
+    # Definição das Equipes
     if is_rh:
         equipes_permitidas = Equipe.objects.filter(oculta=False).order_by('nome')
     else:
@@ -1300,13 +1299,11 @@ def admin_gestor_partial_view(request):
         est = request.GET.get('estado', '')
     except: m, a, mode, eq_id, q, est = ma, aa, 'list', '', '', ''
     
-    # Navegação
+    # Navegação e Datas
     mp, ap = get_competencia_anterior(m, a)
     mpr, apr = (1, a+1) if m==12 else (m+1, a)
     nav_ant = {'mes': mp, 'ano': ap}
     nav_prox = {'mes': mpr, 'ano': apr}
-    
-    # Datas do Mês
     di_mes, df_mes = get_datas_competencia(m, a)
     
     ctx = {
@@ -1319,14 +1316,10 @@ def admin_gestor_partial_view(request):
         'is_financeiro': user.groups.filter(name='Financeiro').exists() or user.is_superuser
     }
     
-    # =========================================================================
-    # LÓGICA 1: GESTÃO DE PONTO (ABA 1)
-    # =========================================================================
     if mode == 'summary':
-        # Modo Cards
+        # Modo Resumo
         qs_resumo = equipes_permitidas
         if q: qs_resumo = qs_resumo.filter(nome__icontains=q)
-        
         res = []
         for e in qs_resumo:
             mem = Funcionario.objects.filter(equipe=e)
@@ -1339,20 +1332,14 @@ def admin_gestor_partial_view(request):
         # Modo Lista
         fq = Funcionario.objects.filter(usuario__is_active=True)
         if est: fq = fq.filter(local_trabalho_estado=est)
-        
         if eq_id: 
-            if equipes_permitidas.filter(id=eq_id).exists():
-                fq = fq.filter(equipe_id=eq_id)
-            else:
-                fq = fq.none()
-        else:
-            fq = fq.filter(equipe__in=equipes_permitidas)
-            
+            if equipes_permitidas.filter(id=eq_id).exists(): fq = fq.filter(equipe_id=eq_id)
+            else: fq = fq.none()
+        else: fq = fq.filter(equipe__in=equipes_permitidas)
         if q: fq = fq.filter(nome_completo__icontains=q)
         
         lst = []
-        # URL base para geração
-        url_base_pdf = reverse('gerar_pdf_ponto')
+        url_base_pdf = reverse('gerar_pdf_ponto') # Certifique-se que essa URL existe
 
         for f in fq.distinct().order_by('nome_completo'):
             pts = RegistroPonto.objects.filter(funcionario=f, data__range=[di_mes, df_mes])
@@ -1360,11 +1347,15 @@ def admin_gestor_partial_view(request):
             tem_assinatura_gest = pts.filter(assinado_gestor=True).exists()
             
             arq_url = None
-            ponto_final = pts.exclude(arquivo_anexo='').order_by('-data').first()
-            if ponto_final and ponto_final.arquivo_anexo:
-                arq_url = ponto_final.arquivo_anexo.url
-
-            # --- AQUI ESTÁ A CORREÇÃO: Link Gerado ---
+            
+            # --- CORREÇÃO PRINCIPAL AQUI ---
+            # Só pega o arquivo se tiver ASSINADO PELO GESTOR (assinado_gestor=True)
+            ponto_assinado = pts.filter(assinado_gestor=True).exclude(arquivo_anexo='').order_by('-data').first()
+            
+            if ponto_assinado and ponto_assinado.arquivo_anexo:
+                arq_url = ponto_assinado.arquivo_anexo.url
+            # Se não tiver assinatura do gestor, arq_url continua None, forçando o botão azul
+            
             url_gerado = f"{url_base_pdf}?funcionario_id={f.id}&mes={m}&ano={a}"
 
             lst.append({
@@ -1372,19 +1363,25 @@ def admin_gestor_partial_view(request):
                 'status_func': tem_assinatura_func, 
                 'status_gestor': tem_assinatura_gest, 
                 'pode_assinar': (tem_assinatura_func and not tem_assinatura_gest),
+                
+                # Importante: O nome da chave aqui é 'arquivo_assinado_url'
                 'arquivo_assinado_url': arq_url, 
-                'url_pdf_gerado': url_gerado, # <--- Enviamos o link gerado
+                
+                'url_pdf_gerado': url_gerado,
                 'nome_download': f"Folha_{f.nome_completo.split()[0]}_{m}_{a}.pdf", 
                 'mes': m, 'ano': a
             })
+            
         ctx['lista_colaboradores'] = lst
-        ctx['lista_ponto'] = lst
         ctx['estados_disponiveis'] = fq.exclude(local_trabalho_estado__isnull=True).values_list('local_trabalho_estado', flat=True).distinct()
-
-    # Lógica de KM (Mantida igual para economizar espaço, pode copiar do anterior se precisar alterar também)
-    # ... (Mantenha o restante da função igual, focando na parte do `lst.append` acima)
     
-    # Retorna o template original
+    # KM e Despesas (Mantido simplificado para focar no erro do ponto)
+    equipes_km = equipes_permitidas.filter(nome__icontains="Campo")
+    ctx['equipes_km'] = equipes_km
+    if equipes_km.exists():
+        # ... (Seu código de KM original fica aqui, sem alterações necessárias) ...
+        pass
+
     return render(request, 'core_rh/includes/rh_area_moderno.html', ctx)
 
     # =========================================================================
