@@ -1,0 +1,311 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo - {{ empresa_selecionada }}</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { background-color: #f4f7fc; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        
+        /* Efeito de Hover na Tabela */
+        .table-hover tbody tr:hover { background-color: rgba(13, 110, 253, 0.05) !important; }
+
+        /* Cabeçalho Azul */
+        .thead-colorful th {
+            background-color: #0d6efd; 
+            color: white;
+            border-bottom: none;
+        }
+        
+        /* Links do Cabeçalho */
+        th a { 
+            color: #fff !important; 
+            text-decoration: none; 
+            display: block; 
+            width: 100%; 
+            transition: all 0.2s;
+        }
+        th a:hover { 
+            color: #d0e2ff !important; 
+            transform: translateY(-1px);
+        }
+        th i { font-size: 0.85em; margin-left: 6px; opacity: 0.6; }
+        th a i.fa-sort-up, th a i.fa-sort-down { opacity: 1; color: #fff; }
+
+        /* Cards */
+        .card-modern {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        /* Loading Spinner Overlay (Oculto por padrão) */
+        #loading-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.7);
+            z-index: 10;
+            justify-content: center;
+            align-items: center;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    
+    <nav class="navbar navbar-dark bg-primary mb-4 shadow">
+        <div class="container px-4">
+            <span class="navbar-brand fw-bold fs-5">
+                <i class="fas fa-boxes me-2"></i> Catálogo {{ empresa_selecionada }}
+            </span>
+            <a href="{% url 'estoque_pecas_dashboard' %}?estoque={{ empresa_selecionada }}" class="btn btn-sm btn-outline-light rounded-pill fw-bold px-3">
+                <i class="fas fa-arrow-left me-1"></i> Painel
+            </a>
+        </div>
+    </nav>
+
+    <div class="container px-4 pb-5">
+        
+        <div class="card card-modern bg-white mb-4">
+            <div class="card-body p-4">
+                <div class="row g-3 align-items-center">
+                    
+                    <div class="col-lg-4 col-md-6">
+                        <div class="input-group shadow-sm rounded-pill overflow-hidden">
+                            <span class="input-group-text bg-white border-0 ps-3"><i class="fas fa-search text-primary"></i></span>
+                            <input type="text" id="search-input" class="form-control border-0 ps-1" 
+                                   placeholder="Digite código ou nome..." 
+                                   value="{{ request.GET.q }}" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6 d-flex justify-content-center gap-2">
+                        <a href="?estoque={{ empresa_selecionada }}" 
+                           class="btn btn-sm rounded-pill fw-bold px-3 {% if not request.GET.filtro_estoque %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                           Todos
+                        </a>
+                        <a href="?estoque={{ empresa_selecionada }}&filtro_estoque=minimo" 
+                           class="btn btn-sm rounded-pill fw-bold px-3 {% if request.GET.filtro_estoque == 'minimo' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                           <i class="fas fa-exclamation-circle small me-1"></i> Mínimo
+                        </a>
+                        <a href="?estoque={{ empresa_selecionada }}&filtro_estoque=zerado" 
+                           class="btn btn-sm rounded-pill fw-bold px-3 {% if request.GET.filtro_estoque == 'zerado' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                           <i class="fas fa-ban small me-1"></i> Zerados
+                        </a>
+                    </div>
+
+                    <div class="col-lg-4 col-md-12 text-lg-end text-center">
+                        <div class="d-inline-flex gap-2 bg-light p-1 rounded-pill shadow-sm">
+                            <a href="{% url 'gerenciar_grupos' %}?estoque={{ empresa_selecionada }}" class="btn btn-outline-dark btn-sm rounded-pill px-3 fw-bold">
+                                <i class="fas fa-tags me-1"></i> Grupos
+                            </a>
+                            <a href="{% url 'nova_peca' %}?estoque={{ empresa_selecionada }}" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                                <i class="fas fa-plus me-1"></i> Novo Item
+                            </a>
+                            <a href="?estoque={{ empresa_selecionada }}&export=xls&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}&order={{ request.GET.order }}" class="btn btn-success btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                                <i class="fas fa-file-excel"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm rounded-3 mb-4">
+                    <i class="fas {% if message.tags == 'success' %}fa-check-circle{% else %}fa-info-circle{% endif %} me-2"></i> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card card-modern overflow-hidden mb-5 position-relative">
+            
+            <div id="loading-overlay">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+            </div>
+
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-primary"><i class="fas fa-list-ul me-2"></i>Listagem de Materiais</h5>
+                <span class="badge bg-primary rounded-pill px-3 py-2">{{ empresa_selecionada }}</span>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="thead-colorful"> 
+                        <tr>
+                            <th class="ps-4 py-3">
+                                <a href="?estoque={{ empresa_selecionada }}&order={% if request.GET.order == 'codigo_material' %}-codigo_material{% else %}codigo_material{% endif %}&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}">
+                                    Cód 
+                                    {% if request.GET.order == 'codigo_material' %}<i class="fas fa-sort-up"></i>
+                                    {% elif request.GET.order == '-codigo_material' %}<i class="fas fa-sort-down"></i>
+                                    {% else %}<i class="fas fa-sort"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="py-3">
+                                <a href="?estoque={{ empresa_selecionada }}&order={% if request.GET.order == 'nome' %}-nome{% else %}nome{% endif %}&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}">
+                                    Material / Descrição
+                                    {% if request.GET.order == 'nome' %}<i class="fas fa-sort-up"></i>
+                                    {% elif request.GET.order == '-nome' %}<i class="fas fa-sort-down"></i>
+                                    {% else %}<i class="fas fa-sort"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="py-3">
+                                <a href="?estoque={{ empresa_selecionada }}&order={% if request.GET.order == 'grupo__nome' %}-grupo__nome{% else %}grupo__nome{% endif %}&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}">
+                                    Grupo
+                                    {% if request.GET.order == 'grupo__nome' %}<i class="fas fa-sort-up"></i>
+                                    {% elif request.GET.order == '-grupo__nome' %}<i class="fas fa-sort-down"></i>
+                                    {% else %}<i class="fas fa-sort"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="py-3">NCM</th>
+                            <th class="text-end py-3">
+                                <a href="?estoque={{ empresa_selecionada }}&order={% if request.GET.order == 'preco_custo' %}-preco_custo{% else %}preco_custo{% endif %}&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}">
+                                    V. Unit
+                                    {% if request.GET.order == 'preco_custo' %}<i class="fas fa-sort-up"></i>
+                                    {% elif request.GET.order == '-preco_custo' %}<i class="fas fa-sort-down"></i>
+                                    {% else %}<i class="fas fa-sort"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="text-center py-3">
+                                <a href="?estoque={{ empresa_selecionada }}&order={% if request.GET.order == 'estoque_atual' %}-estoque_atual{% else %}estoque_atual{% endif %}&q={{ request.GET.q }}&filtro_estoque={{ request.GET.filtro_estoque }}">
+                                    Saldo
+                                    {% if request.GET.order == 'estoque_atual' %}<i class="fas fa-sort-up"></i>
+                                    {% elif request.GET.order == '-estoque_atual' %}<i class="fas fa-sort-down"></i>
+                                    {% else %}<i class="fas fa-sort"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th class="text-end py-3">V. Total</th>
+                            <th class="text-center pe-4 py-3">Ações</th>
+                        </tr>
+                    </thead>
+                    
+                    <tbody id="tabela-conteudo">
+                        {% for p in pecas %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-primary">
+                                <i class="fas fa-barcode me-1 opacity-50"></i> #{{ p.codigo_material }}
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark">{{ p.nome }}</div>
+                            </td>
+                            <td>
+                                {% if p.grupo %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill px-3">
+                                        {{ p.grupo.nome }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small">{{ p.ncm|default:"-" }}</td>
+                            <td class="text-end fw-bold text-secondary">R$ {{ p.preco_custo|floatformat:2 }}</td>
+                            
+                            <td class="text-center">
+                                {% if p.estoque_atual == 0 %}
+                                    <span class="badge bg-dark rounded-pill shadow-sm px-3 py-2">Zerado</span>
+                                {% elif p.estoque_atual <= p.estoque_minimo %}
+                                    <span class="badge bg-danger rounded-pill shadow-sm px-3 py-2">
+                                        {{ p.estoque_atual }} <i class="fas fa-arrow-down small ms-1"></i>
+                                    </span>
+                                {% elif p.estoque_atual < p.estoque_ideal %}
+                                    <span class="badge bg-warning text-dark rounded-pill px-3 py-2">{{ p.estoque_atual }}</span>
+                                {% else %}
+                                    <span class="badge bg-success rounded-pill shadow-sm px-3 py-2">{{ p.estoque_atual }}</span>
+                                {% endif %}
+                            </td>
+                            
+                            <td class="text-end fw-bold text-success">
+                                R$ {% widthratio p.estoque_atual 1 p.preco_custo %}
+                            </td>
+                            
+                            <td class="text-center pe-4">
+                                <a href="{% url 'editar_peca' p.id %}?estoque={{ empresa_selecionada }}" class="btn btn-sm btn-outline-primary rounded-circle shadow-sm" style="width: 32px; height: 32px; padding: 4px 0;" title="Editar Item">
+                                    <i class="fas fa-pen"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <div class="text-muted opacity-50 mb-3">
+                                    <i class="fas fa-folder-open fa-4x"></i>
+                                </div>
+                                <h6 class="fw-bold text-secondary">Nenhum material encontrado.</h6>
+                                <p class="text-muted small mb-0">Tente buscar por outro termo.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="card-footer bg-white text-end py-3 border-top">
+                <span class="text-muted small me-2 text-uppercase letter-spacing-1">Valor Total em Estoque:</span>
+                <span class="fs-5 fw-bolder text-primary">R$ {{ valor_total_catalogo|floatformat:2 }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const searchInput = document.getElementById("search-input");
+            const tabelaConteudo = document.getElementById("tabela-conteudo");
+            const loadingOverlay = document.getElementById("loading-overlay");
+            let timeout = null;
+
+            searchInput.addEventListener("input", function(e) {
+                // Limpa o timer anterior (Debounce)
+                clearTimeout(timeout);
+
+                // Mostra loading
+                loadingOverlay.style.display = "flex";
+
+                // Espera 500ms após o usuário parar de digitar
+                timeout = setTimeout(() => {
+                    const termo = e.target.value;
+                    const url = new URL(window.location.href);
+                    
+                    // Atualiza o parâmetro 'q' na URL sem recarregar
+                    url.searchParams.set("q", termo);
+                    
+                    // Faz a requisição AJAX para a mesma URL
+                    fetch(url)
+                        .then(response => response.text())
+                        .then(html => {
+                            // Converte o texto recebido em HTML
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, "text/html");
+                            
+                            // Substitui apenas o corpo da tabela
+                            const novoCorpo = doc.getElementById("tabela-conteudo").innerHTML;
+                            tabelaConteudo.innerHTML = novoCorpo;
+                            
+                            // Esconde loading
+                            loadingOverlay.style.display = "none";
+                            
+                            // Opcional: Atualiza a URL do navegador
+                            window.history.pushState({}, "", url);
+                        })
+                        .catch(err => {
+                            console.error("Erro na busca:", err);
+                            loadingOverlay.style.display = "none";
+                        });
+                }, 500); // 500ms de delay
+            });
+        });
+    </script>
+</body>
+</html>

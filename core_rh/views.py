@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
+import csv
 import zipfile
 import io
 import os
@@ -23,6 +24,12 @@ from django.contrib import messages
 from django.core.files.base import ContentFile
 from django.db.models import Sum
 from django.db import transaction
+from django.db.models import Sum, F, Q, Count
+from django.contrib import messages
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+import openpyxl
 # PDF e Relatórios
 import pdfplumber
 from reportlab.pdfgen import canvas
@@ -40,6 +47,8 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from django.views.decorators.http import require_POST
+from .nfe_service import emitir_nfe_saida
+from django.db.models import Max #
 # Utils Extras
 import holidays 
 try:
@@ -62,7 +71,9 @@ except ImportError:
 # Models e Forms
 from .models import (
     RegistroPonto, Funcionario, Equipe, Contracheque, Ferias, 
-    Atestado, ControleKM, TrechoKM, DespesaDiversa
+    Atestado, ControleKM, TrechoKM, DespesaDiversa,
+    # Novos Models de Estoque:
+    Peca, MovimentacaoPeca, GrupoPeca
 )
 from .forms import AtestadoForm, CpfPasswordResetForm
 
@@ -248,11 +259,21 @@ def salvar_ponto_view(request):
              messages.error(request, "Nenhum registro de ponto encontrado para anexar o arquivo.")
         return redirect(redirect_url)
 
+    # --- CONFIGURAÇÃO DE FERIADOS (Igual ao folha_ponto_view) ---
+    feriados_br = holidays.BR(state='DF', years=ano) 
+    if hasattr(funcionario, 'estado_sigla') and funcionario.estado_sigla:
+        try: 
+            feriados_br = holidays.BR(state=funcionario.estado_sigla, years=ano)
+        except: 
+            pass
+    # -----------------------------------------------------------
+
     delta_dias = (data_fim - data_inicio).days
 
     for i in range(delta_dias + 1):
         data_ponto = data_inicio + timedelta(days=i)
         dia_num = data_ponto.day
+        
         entrada_1_str = request.POST.get(f'entrada_1_{dia_num}', '').strip()
         saida_1_str = request.POST.get(f'saida_1_{dia_num}', '').strip()
         entrada_2_str = request.POST.get(f'entrada_2_{dia_num}', '').strip()
@@ -260,6 +281,15 @@ def salvar_ponto_view(request):
         entrada_extra_str = request.POST.get(f'entrada_extra_{dia_num}', '').strip()
         saida_extra_str = request.POST.get(f'saida_extra_{dia_num}', '').strip()
         observacoes = request.POST.get(f'observacoes_{dia_num}', '').strip()
+        
+        # --- LÓGICA CORRIGIDA: PRIORIDADE DO USUÁRIO ---
+        eh_feriado = data_ponto in feriados_br
+        
+        # Se o campo estiver VAZIO e for FERIADO, preenche automático.
+        # Se o usuário escreveu algo (ex: "Hora Extra"), MANTÉM o que ele escreveu.
+        if not observacoes and eh_feriado:
+            observacoes = "Feriado"
+        # -----------------------------------------------
         
         try:
             registro = RegistroPonto.objects.get(funcionario=funcionario, data=data_ponto)
@@ -318,8 +348,6 @@ def gerar_pdf_ponto_view(request):
             else:
                 try:
                     gestor = Funcionario.objects.get(usuario=request.user)
-                    
-                    # --- CORREÇÃO: Permissão para gerar PDF como gestor ---
                     is_gestor_autorizado = Equipe.objects.filter(
                         Q(gestor=gestor) | Q(gestores=gestor)
                     ).filter(Q(id=alvo.equipe.id) | Q(id__in=alvo.outras_equipes.values_list('id', flat=True))).exists()
@@ -347,6 +375,12 @@ def gerar_pdf_ponto_view(request):
         data_inicio__lte=data_fim
     )
 
+    ferias_periodo = Ferias.objects.filter(
+        funcionario=funcionario,
+        data_inicio__lte=data_fim,
+        data_fim__gte=data_inicio
+    )
+
     dias_do_mes = []
     total_horas_delta = timedelta()
     total_extras_delta = timedelta()
@@ -356,6 +390,18 @@ def gerar_pdf_ponto_view(request):
         data_atual = data_inicio + timedelta(days=i)
         registro = registros_dict.get(data_atual.day)
         
+        # 1. Verifica Feriado
+        eh_feriado = data_atual in feriados_br
+        nome_feriado = feriados_br.get(data_atual).upper() if eh_feriado else ""
+
+        # 2. Verifica Férias
+        eh_ferias = False
+        for f in ferias_periodo:
+            if f.data_inicio <= data_atual <= f.data_fim:
+                eh_ferias = True
+                break
+
+        # 3. Verifica Atestado
         tipo_atestado = None
         for atestado in atestados_periodo:
             if atestado.tipo == 'DIAS':
@@ -366,9 +412,7 @@ def gerar_pdf_ponto_view(request):
             elif atestado.tipo == 'HORAS' and atestado.data_inicio == data_atual:
                 tipo_atestado = 'HORAS'
 
-        eh_feriado = data_atual in feriados_br
-        nome_feriado = feriados_br.get(data_atual).upper() if eh_feriado else ""
-
+        # Cria Mock se não existir registro
         if not registro:
             class MockReg:
                 entrada_manha = None
@@ -381,12 +425,29 @@ def gerar_pdf_ponto_view(request):
                 observacao = ""
             registro = MockReg()
         
-        if tipo_atestado == 'DIAS':
-            registro.observacao = "Atestado Médico"
-        elif tipo_atestado == 'HORAS':
-            if not registro.observacao: 
-                registro.observacao = "Atestado de Comparecimento"
+        if registro.observacao is None:
+            registro.observacao = ""
 
+        # --- LÓGICA DE PRIORIDADE CORRIGIDA ---
+        # Se NÃO tem observação manual, aplica a automática
+        if not registro.observacao:
+            if eh_ferias:
+                registro.observacao = "Férias"
+            elif eh_feriado:
+                registro.observacao = "FERIADO"
+            elif tipo_atestado == 'DIAS':
+                registro.observacao = "Atestado Médico"
+            elif tipo_atestado == 'HORAS':
+                registro.observacao = "Atestado de Comparecimento"
+        
+        # --- O TRUQUE: FORÇA O TEXTO MANUAL EM FERIADOS ---
+        # Se for feriado MAS tiver texto diferente de "FERIADO", enganamos o template 
+        # dizendo que não é feriado (eh_feriado=False), assim ele imprime o texto.
+        if eh_feriado and registro.observacao and registro.observacao != "FERIADO":
+            eh_feriado = False
+        # --------------------------------------------------
+
+        # Cálculo de horas (padrão)
         td_normal = timedelta()
         if hasattr(registro, 'pk') and registro.entrada_manha and registro.saida_almoco:
             dt_e1 = datetime.combine(date.min, registro.entrada_manha)
@@ -414,7 +475,7 @@ def gerar_pdf_ponto_view(request):
         dias_do_mes.append({
             'data': data_atual,
             'dia_semana_nome': DIAS_SEMANA_PT[data_atual.weekday()],
-            'eh_feriado': eh_feriado,
+            'eh_feriado': eh_feriado, # Aqui vai o valor "hackeado" se necessário
             'nome_feriado': nome_feriado,
             'registro': registro
         })
@@ -459,7 +520,6 @@ def gerar_pdf_ponto_view(request):
         response.write(html_string)
     
     return response
-
 @login_required
 def folha_ponto_view(request):
     mes_atual_real, ano_atual_real = get_competencia_atual()
@@ -554,6 +614,7 @@ def folha_ponto_view(request):
         
         registro = registros_dict.get(data_atual.day)
         
+        # --- LÓGICA DE PRIORIDADE DE EXIBIÇÃO ---
         obs_visual = ""
         if registro and registro.observacao:
             obs_visual = registro.observacao
@@ -565,6 +626,7 @@ def folha_ponto_view(request):
             obs_visual = "Atestado Médico"
         elif tipo_atestado == 'HORAS':
             obs_visual = "Atestado de Comparecimento"
+        # ----------------------------------------
 
         dias_do_mes.append({
             'data': data_atual,
@@ -595,7 +657,6 @@ def folha_ponto_view(request):
     }
     
     return render(request, 'core_rh/folha_ponto.html', context)
-
 
 # --- SUBSTITUA A FUNÇÃO area_gestor_view INTEIRA POR ESTA ---
 @login_required
@@ -1025,7 +1086,7 @@ def rh_team_detail_view(request, equipe_id):
 def rh_batch_download_view(request, equipe_id):
     """
     Gera um ZIP com todos os PDFs assinados da equipe no mês selecionado.
-    Em caso de erro, redireciona de volta para a página atual com um alerta.
+    Busca no intervalo correto da competência, APENAS para membros da equipe PRINCIPAL.
     """
     equipe = get_object_or_404(Equipe, pk=equipe_id)
     mes = request.GET.get('mes')
@@ -1035,42 +1096,58 @@ def rh_batch_download_view(request, equipe_id):
         messages.error(request, "Mês e Ano não informados para download.")
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
+    try:
+        mes = int(mes)
+        ano = int(ano)
+        data_inicio, data_fim = get_datas_competencia(mes, ano)
+    except ValueError:
+        messages.error(request, "Data inválida.")
+        return redirect(request.META.get('HTTP_REFERER', '/'))
+
+    # --- ALTERAÇÃO AQUI: Busca apenas pela equipe principal ---
+    membros = Funcionario.objects.filter(equipe=equipe) 
+    # ----------------------------------------------------------
+
     registros = RegistroPonto.objects.filter(
-        funcionario__equipe=equipe,
-        data__month=mes,
-        data__year=ano
-    ).exclude(arquivo_anexo='').exclude(arquivo_anexo__isnull=True)
+        funcionario__in=membros,
+        data__range=[data_inicio, data_fim]
+    ).exclude(arquivo_anexo='').exclude(arquivo_anexo__isnull=True).select_related('funcionario')
 
     if not registros.exists():
-        messages.warning(request, f"Nenhum ponto assinado encontrado para a equipe {equipe.nome} em {mes}/{ano}.")
+        messages.warning(request, f"Nenhum ponto assinado encontrado para a equipe {equipe.nome} na competência {mes}/{ano}.")
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
     zip_buffer = io.BytesIO()
     arquivos_adicionados = 0
+    arquivos_processados = set()
 
     with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
         for ponto in registros:
+            if ponto.arquivo_anexo.name in arquivos_processados:
+                continue
+                
             try:
-                file_path = ponto.arquivo_anexo.path
-                if os.path.exists(file_path):
-                    file_name = f"{ponto.funcionario.nome_completo}_{ponto.data.strftime('%d-%m-%Y')}.pdf"
-                    zip_file.write(file_path, file_name)
+                if ponto.arquivo_anexo and hasattr(ponto.arquivo_anexo, 'path') and os.path.exists(ponto.arquivo_anexo.path):
+                    nome_limpo = ponto.funcionario.nome_completo.strip().replace(' ', '_')
+                    file_name = f"Folha_{nome_limpo}_{mes:02d}_{ano}.pdf"
+                    
+                    zip_file.write(ponto.arquivo_anexo.path, file_name)
                     arquivos_adicionados += 1
+                    arquivos_processados.add(ponto.arquivo_anexo.name)
             except Exception as e:
                 print(f"Erro ao adicionar arquivo {ponto}: {e}")
                 continue
 
     if arquivos_adicionados == 0:
-        messages.error(request, "Arquivos físicos não encontrados no servidor.")
+        messages.error(request, "Registros encontrados, mas os arquivos físicos não estão no servidor.")
         return redirect(request.META.get('HTTP_REFERER', '/'))
 
     zip_buffer.seek(0)
     response = HttpResponse(zip_buffer, content_type='application/zip')
-    nome_zip = f"Pontos_{equipe.nome}_{mes}_{ano}.zip"
+    nome_zip = f"Pontos_{equipe.nome.replace(' ', '_')}_{mes:02d}_{ano}.zip"
     response['Content-Disposition'] = f'attachment; filename="{nome_zip}"'
     
     return response
-
 @login_required
 def rh_unlock_timesheet_view(request, func_id, mes, ano):
     if not usuario_eh_rh(request.user):
@@ -1238,7 +1315,7 @@ def admin_gestor_partial_view(request):
         'nav_anterior': nav_ant, 'nav_proximo': nav_prox, 
         'mode': mode, 'q': q, 'equipe_id': eq_id, 'estado_filtro': est,
         'todas_equipes': equipes_permitidas,
-        'is_gestao': usuario_eh_rh(user), # Flag para botões de aprovação
+        'is_gestao': usuario_eh_rh(user),
         'is_financeiro': user.groups.filter(name='Financeiro').exists() or user.is_superuser
     }
     
@@ -1246,13 +1323,16 @@ def admin_gestor_partial_view(request):
     # LÓGICA 1: GESTÃO DE PONTO (ABA 1)
     # =========================================================================
     if mode == 'summary':
-        # Modo Cards (Resumo)
+        # Modo Cards (Resumo) - Mostra contagem por equipe
         qs_resumo = equipes_permitidas
         if q: qs_resumo = qs_resumo.filter(nome__icontains=q)
         
         res = []
         for e in qs_resumo:
-            mem = Funcionario.objects.filter(Q(equipe=e)|Q(outras_equipes=e)).distinct()
+            # --- ALTERAÇÃO: Filtra apenas quem tem esta equipe como PRINCIPAL ---
+            mem = Funcionario.objects.filter(equipe=e)
+            # -------------------------------------------------------------------
+            
             ass = RegistroPonto.objects.filter(funcionario__in=mem, data__range=[di_mes, df_mes], assinado_gestor=True).values('funcionario').distinct().count()
             tot = mem.count()
             res.append({'equipe': e, 'total_membros': tot, 'total_assinados': ass, 'progresso': int(ass/tot*100) if tot>0 else 0})
@@ -1266,11 +1346,13 @@ def admin_gestor_partial_view(request):
         # Filtro de Equipe (Ponto)
         if eq_id: 
             if equipes_permitidas.filter(id=eq_id).exists():
-                fq = fq.filter(Q(equipe_id=eq_id)|Q(outras_equipes__id=eq_id))
+                # --- ALTERAÇÃO: Apenas equipe principal ---
+                fq = fq.filter(equipe_id=eq_id)
             else:
                 fq = fq.none()
         else:
-            fq = fq.filter(Q(equipe__in=equipes_permitidas)|Q(outras_equipes__in=equipes_permitidas))
+            # --- ALTERAÇÃO: Apenas equipes principais permitidas ---
+            fq = fq.filter(equipe__in=equipes_permitidas)
             
         if q: fq = fq.filter(nome_completo__icontains=q)
         
@@ -1281,7 +1363,6 @@ def admin_gestor_partial_view(request):
             tem_assinatura_func = pts.filter(assinado_funcionario=True).exists()
             tem_assinatura_gest = pts.filter(assinado_gestor=True).exists()
             
-            # Pega link do arquivo se existir
             arq_url = None
             ponto_final = pts.exclude(arquivo_anexo='').order_by('-data').first()
             if ponto_final and ponto_final.arquivo_anexo:
@@ -1296,20 +1377,20 @@ def admin_gestor_partial_view(request):
                 'nome_download': f"Folha_{f.nome_completo.split()[0]}_{m}_{a}.pdf", 
                 'mes': m, 'ano': a
             })
-        ctx['lista_colaboradores'] = lst # Usado na aba Ponto
-        ctx['lista_ponto'] = lst # Alias para garantir compatibilidade
+        ctx['lista_colaboradores'] = lst
+        ctx['lista_ponto'] = lst
         ctx['estados_disponiveis'] = fq.exclude(local_trabalho_estado__isnull=True).values_list('local_trabalho_estado', flat=True).distinct()
 
     # =========================================================================
     # LÓGICA 2: GESTÃO DE KM / CAMPO (ABA 2)
     # =========================================================================
+    # Mantive a lógica de KM inalterada, pois geralmente KM envolve equipes secundárias de campo.
+    # Se quiser alterar lá também, me avise.
     
-    # 1. Filtrar apenas equipes de "Campo" (Contém 'Campo' no nome)
     equipes_km = equipes_permitidas.filter(nome__icontains="Campo")
     ctx['equipes_km'] = equipes_km
 
     if equipes_km.exists():
-        # 2. Definir Equipe Selecionada para KM
         km_team_id = request.GET.get('km_team')
         if km_team_id and equipes_km.filter(id=km_team_id).exists():
             equipe_km_selecionada = equipes_km.get(id=km_team_id)
@@ -1318,7 +1399,6 @@ def admin_gestor_partial_view(request):
         
         ctx['equipe_km_selecionada'] = equipe_km_selecionada
 
-        # 3. Calcular Semanas do Mês
         cal = monthcalendar(a, m)
         semanas_validas = [s for s in cal if any(d != 0 for d in s)]
         
@@ -1327,11 +1407,9 @@ def admin_gestor_partial_view(request):
         except:
             semana_param = 1
             
-        # Garante índice válido
         if semana_param < 1: semana_param = 1
         if semana_param > len(semanas_validas): semana_param = len(semanas_validas)
 
-        # Monta lista de semanas para as pílulas de navegação
         semanas_info = []
         dt_inicio_sem = None
         dt_fim_sem = None
@@ -1339,7 +1417,6 @@ def admin_gestor_partial_view(request):
         for idx, semana_lista in enumerate(semanas_validas, start=1):
             dia_ref = next(d for d in semana_lista if d != 0)
             data_ref = date(a, m, dia_ref)
-            # Segunda a Domingo
             inicio = data_ref - timedelta(days=data_ref.weekday())
             fim = inicio + timedelta(days=6)
             
@@ -1358,30 +1435,24 @@ def admin_gestor_partial_view(request):
         ctx['semanas_do_mes'] = semanas_info
         ctx['semana_selecionada'] = semana_param
 
-        # 4. Buscar Dados Financeiros (KM + Despesas) da Semana Selecionada
+        # Aqui mantive a lógica original para KM (Principal OU Secundária)
+        # Pois equipes de campo costumam ser secundárias.
         funcionarios_km = Funcionario.objects.filter(Q(equipe=equipe_km_selecionada)|Q(outras_equipes=equipe_km_selecionada)).distinct().order_by('nome_completo')
         
         dados_km_semana = []
         
         for func in funcionarios_km:
-            # Filtra registros da semana específica
             kms = ControleKM.objects.filter(funcionario=func, data__range=[dt_inicio_sem, dt_fim_sem])
             despesas = DespesaDiversa.objects.filter(funcionario=func, data__range=[dt_inicio_sem, dt_fim_sem])
             
             tem_registro = kms.exists() or despesas.exists()
             
             if tem_registro:
-                # Cálculos
                 total_km_val = sum(k.total_km for k in kms)
                 total_despesas_val = sum(d.valor for d in despesas)
-                
-                # Fator multiplicador (Se não tiver no func, usa 1.20)
                 fator = float(func.valor_km) if func.valor_km and func.valor_km > 0 else 1.20
-                
-                # CÁLCULO FINAL: (KM * Fator) + Despesas
                 valor_total_financeiro = (float(total_km_val) * fator) + float(total_despesas_val)
                 
-                # Definição de Status Geral (Prioridade: Rejeitado > Pendente > Aprovado)
                 todos_status = list(kms.values_list('status', flat=True)) + list(despesas.values_list('status', flat=True))
                 
                 if 'Rejeitado' in todos_status: status_geral = 'Rejeitado'
@@ -1396,19 +1467,16 @@ def admin_gestor_partial_view(request):
                     'funcionario': func,
                     'tem_registro': True,
                     'total_km': total_km_val,
-                    'valor_total_financeiro': valor_total_financeiro, # CAMPO CALCULADO
+                    'valor_total_financeiro': valor_total_financeiro,
                     'status': status_geral,
-                    'ids_km': list(kms.values_list('id', flat=True)) # Para links de ação
+                    'ids_km': list(kms.values_list('id', flat=True))
                 })
-            else:
-                # Opcional: Mostrar funcionários sem registro na lista?
-                # Se não quiser mostrar quem não rodou, comente o append abaixo
-                # dados_km_semana.append({'funcionario': func, 'tem_registro': False, 'status': 'Vazio'})
-                pass
 
         ctx['dados_km_semana_atual'] = dados_km_semana
 
     return render(request, 'core_rh/includes/rh_area_moderno.html', ctx)
+
+
 try:
     from .models import Ferias
 except ImportError:
@@ -3531,3 +3599,504 @@ def atualizar_valor_km_equipe(request, equipe_id):
     # Redireciona de volta mantendo os filtros
     return redirect(request.META.get('HTTP_REFERER', 'area_gestor'))
 
+# ==========================================
+# MÓDULO: ALMOXARIFADO (CORRIGIDO FINAL)
+# ==========================================
+
+def formata_numero_br(valor):
+    if valor is None: return "0,00"
+    return f"{valor:.2f}".replace('.', ',')
+
+@login_required
+def estoque_pecas_dashboard(request):
+    """Painel principal"""
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    pecas = Peca.objects.filter(ativo=True, empresa=empresa_sel)
+    
+    total_itens = pecas.count()
+    valor_inventario = sum(p.estoque_atual * p.preco_custo for p in pecas)
+    
+    baixo_estoque_list = pecas.filter(estoque_atual__lte=F('estoque_minimo')).order_by('estoque_atual')[:5]
+    baixo_estoque_count = pecas.filter(estoque_atual__lte=F('estoque_minimo')).count()
+
+    # CORREÇÃO: select_related apenas em 'peca', pois tecnico_nome é texto simples agora
+    ultimas_movimentacoes = MovimentacaoPeca.objects.filter(
+        peca__empresa=empresa_sel
+    ).select_related('peca').order_by('-data', '-id')[:10]
+    
+    return render(request, 'core_rh/estoque_pecas_dashboard.html', {
+        'empresa_selecionada': empresa_sel,
+        'total_itens': total_itens,
+        'valor_inventario': valor_inventario,
+        'baixo_estoque_list': baixo_estoque_list,
+        'baixo_estoque_count': baixo_estoque_count,
+        'movimentacoes': ultimas_movimentacoes,
+    })
+
+# --- GRUPOS ---
+
+@login_required
+def gerenciar_grupos_view(request):
+    # Pega a empresa da URL (Padrão: DIVIDATA)
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    
+    # FILTRA: Só traz grupos desta empresa
+    grupos = GrupoPeca.objects.filter(empresa=empresa_sel).order_by('nome')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'add':
+            novo_nome = request.POST.get('nome_grupo')
+            if novo_nome:
+                # CRIA: Associa o novo grupo à empresa atual
+                # Usa get_or_create para evitar duplicidade na mesma empresa
+                GrupoPeca.objects.get_or_create(nome=novo_nome, empresa=empresa_sel)
+                messages.success(request, f"Grupo '{novo_nome}' adicionado em {empresa_sel}!")
+                
+        elif action == 'delete':
+            grupo_id = request.POST.get('grupo_id')
+            # DELETA: Garante que só deleta se for da empresa atual (segurança)
+            grupo = get_object_or_404(GrupoPeca, id=grupo_id, empresa=empresa_sel)
+            grupo.delete()
+            messages.success(request, "Grupo removido!")
+            
+        return redirect(f"{reverse('gerenciar_grupos')}?estoque={empresa_sel}")
+
+    return render(request, 'core_rh/gerenciar_grupos.html', {
+        'grupos': grupos,
+        'empresa_selecionada': empresa_sel
+    })
+# --- CATÁLOGO ---
+
+@login_required
+def lista_pecas_view(request):
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    export_xls = request.GET.get('export', '')
+    
+    # Query Base
+    pecas = Peca.objects.filter(ativo=True, empresa=empresa_sel).select_related('grupo')
+
+    # --- PESQUISA INTELIGENTE (ID + TEXTO) ---
+    q = request.GET.get('q', '').strip()
+    if q:
+        filtros = Q(nome__icontains=q) | Q(codigo_material__icontains=q)
+        q_num = q.replace('#', '')
+        if q_num.isdigit():
+            filtros |= Q(id=q_num)
+        pecas = pecas.filter(filtros)
+    
+    # Filtros de Situação
+    filtro_estoque = request.GET.get('filtro_estoque', '')
+    if filtro_estoque == 'minimo':
+        pecas = pecas.filter(estoque_atual__lte=F('estoque_minimo'))
+    elif filtro_estoque == 'zerado':
+        pecas = pecas.filter(estoque_atual=0)
+    elif filtro_estoque == 'abaixo_ideal':
+        pecas = pecas.filter(estoque_atual__lt=F('estoque_ideal'))
+
+    # --- ORDENAÇÃO (Alterado para Padrão: Código) ---
+    # Se não vier nada na URL, usa 'codigo_material'
+    ordem = request.GET.get('order', 'codigo_material') 
+    
+    campos_permitidos = ['nome', 'codigo_material', 'grupo__nome', 'estoque_atual', 'preco_custo', 'ncm', 'id']
+    
+    if ordem.lstrip('-') in campos_permitidos:
+        pecas = pecas.order_by(ordem)
+    else:
+        # Fallback de segurança também pelo código
+        pecas = pecas.order_by('codigo_material')
+
+    # Exportação Excel
+    if export_xls:
+        import csv
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = f'attachment; filename="Catalogo_{empresa_sel}.csv"'
+        writer = csv.writer(response, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(['ID', 'Código', 'Nome', 'Grupo', 'NCM', 'Valor Unit', 'Estoque', 'Valor Total', 'Situação'])
+        for p in pecas:
+            v_total = p.estoque_atual * p.preco_custo
+            sit = "OK"
+            if p.estoque_atual == 0: sit = "ZERADO"
+            elif p.estoque_atual <= p.estoque_minimo: sit = "CRÍTICO"
+            elif p.estoque_atual < p.estoque_ideal: sit = "ABAIXO IDEAL"
+            writer.writerow([
+                p.id, p.codigo_material, p.nome, p.grupo.nome if p.grupo else '-', p.ncm,
+                formata_numero_br(p.preco_custo), p.estoque_atual, formata_numero_br(v_total), sit
+            ])
+        return response
+
+    return render(request, 'core_rh/peca_list.html', {
+        'pecas': pecas, 'empresa_selecionada': empresa_sel,
+        'valor_total_catalogo': sum(p.estoque_atual * p.preco_custo for p in pecas)
+    })
+@login_required
+def editar_peca_view(request, peca_id=None):
+    peca = None
+    if peca_id:
+        peca = get_object_or_404(Peca, id=peca_id)
+    
+    grupos = GrupoPeca.objects.all()
+    
+    # Define a empresa (Se for edição, usa a da peça. Se for nova, usa a da URL ou Padrão)
+    empresa_atual = peca.empresa if peca else request.GET.get('estoque', 'DIVIDATA')
+
+    form_data = {}
+
+    if request.method == 'POST':
+        form_data = request.POST
+        try:
+            nome = request.POST.get('nome')
+            grupo_id = request.POST.get('grupo')
+            estoque_min = request.POST.get('estoque_minimo')
+            estoque_ideal = request.POST.get('estoque_ideal')
+            preco_custo = request.POST.get('preco_custo')
+            ncm = request.POST.get('ncm')
+            
+            if not nome: raise ValueError("O nome é obrigatório.")
+
+            if not peca:
+                # --- LÓGICA DE CÓDIGO LINEAR POR EMPRESA ---
+                # 1. Busca o maior código JÁ EXISTENTE para ESSA EMPRESA
+                maior_codigo = Peca.objects.filter(empresa=empresa_atual).aggregate(Max('codigo_material'))['codigo_material__max']
+                
+                # 2. Se não tiver nenhum, começa do 1. Se tiver, soma +1
+                novo_codigo = 1 if maior_codigo is None else int(maior_codigo) + 1
+                
+                peca = Peca()
+                peca.empresa = empresa_atual
+                peca.estoque_atual = 0
+                peca.codigo_material = novo_codigo # Salva o número sequencial
+            
+            peca.nome = nome
+            peca.ncm = ncm
+            peca.estoque_minimo = int(estoque_min) if estoque_min else 5
+            peca.estoque_ideal = int(estoque_ideal) if estoque_ideal else 10
+            
+            if preco_custo:
+                peca.preco_custo = float(preco_custo.replace(',', '.'))
+            
+            if grupo_id:
+                peca.grupo = get_object_or_404(GrupoPeca, id=grupo_id)
+            else:
+                peca.grupo = None
+                
+            peca.save()
+            
+            messages.success(request, f"Item #{peca.codigo_material} - {peca.nome} salvo com sucesso!")
+            return redirect(f"/estoque/?estoque={peca.empresa}")
+
+        except Exception as e:
+            messages.error(request, f"Erro ao salvar: {e}")
+
+    return render(request, 'core_rh/peca_form.html', {
+        'peca': peca, 
+        'grupos': grupos,
+        'empresa_selecionada': empresa_atual,
+        'form_data': form_data 
+        
+    })
+@login_required
+def entrada_peca_view(request):
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    pecas = Peca.objects.filter(ativo=True, empresa=empresa_sel).order_by('nome') # Carrega lista para usar no erro
+    
+    if request.method == 'POST':
+        try:
+            peca_id = request.POST.get('peca_id')
+            if not peca_id: raise ValueError("Selecione uma peça.")
+
+            peca = get_object_or_404(Peca, id=peca_id, empresa=empresa_sel)
+            
+            MovimentacaoPeca.objects.create(
+                peca=peca,
+                tipo='E',
+                quantidade=int(request.POST.get('quantidade')),
+                valor_unitario=float(request.POST.get('valor_unitario', '0').replace(',', '.')),
+                data=request.POST.get('data'),
+                nota_fiscal=request.POST.get('nota_fiscal'),
+                fornecedor=request.POST.get('fornecedor'),
+                filial=request.POST.get('filial'),
+                observacao=request.POST.get('observacao', '')
+            )
+            messages.success(request, f"Entrada registrada: {peca.nome}")
+            return redirect(f"{reverse('relatorio_entrada')}?estoque={empresa_sel}")
+
+        except Exception as e:
+            messages.error(request, f"Erro na entrada: {e}")
+            # RENDERIZA mantendo os dados
+            return render(request, 'core_rh/entrada_form.html', {
+                'pecas': pecas, 
+                'empresa_padrao': empresa_sel, 
+                'filiais': MovimentacaoPeca.FILIAL_CHOICES,
+                'request_post': request.POST # Passa dados para repopular
+            })
+
+    return render(request, 'core_rh/entrada_form.html', {
+        'pecas': pecas, 'empresa_padrao': empresa_sel, 
+        'filiais': MovimentacaoPeca.FILIAL_CHOICES
+    })
+
+@login_required
+def relatorio_entrada_view(request):
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    
+    movs = MovimentacaoPeca.objects.filter(tipo='E', peca__empresa=empresa_sel) \
+        .select_related('peca', 'peca__grupo') \
+        .annotate(valor_total_db=F('quantidade') * F('valor_unitario'))
+
+    dt_ini = request.GET.get('data_inicio')
+    dt_fim = request.GET.get('data_fim')
+    if dt_ini and dt_fim:
+        movs = movs.filter(data__range=[dt_ini, dt_fim])
+        
+    ordem = request.GET.get('order', '-data')
+    if 'valor_total' in ordem: ordem = ordem.replace('valor_total', 'valor_total_db')
+    
+    campos_validos = ['data', 'fornecedor', 'peca__nome', 'filial', 'quantidade', 'valor_unitario', 'valor_total_db', 'nota_fiscal']
+    if ordem.lstrip('-') in campos_validos:
+        movs = movs.order_by(ordem)
+    else:
+        movs = movs.order_by('-data')
+
+    # --- EXPORTAÇÃO EXCEL ENTRADA ---
+    if request.GET.get('export') == 'xls':
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = f'attachment; filename="Entradas_{empresa_sel}.csv"'
+        writer = csv.writer(response, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        
+        writer.writerow(['Data', 'NF', 'Fornecedor', 'Cod', 'Material', 'Local', 'Qtd', 'V. Unit', 'V. Total'])
+        for m in movs:
+            v_tot = m.quantidade * m.valor_unitario
+            writer.writerow([
+                m.data.strftime('%d/%m/%Y'), 
+                m.nota_fiscal, 
+                m.fornecedor,
+                m.peca.codigo_material, 
+                m.peca.nome, 
+                m.filial, 
+                m.quantidade, 
+                str(m.valor_unitario).replace('.', ','), 
+                str(v_tot).replace('.', ',')
+            ])
+        return response
+
+    total_periodo = sum(m.quantidade * m.valor_unitario for m in movs)
+
+    return render(request, 'core_rh/relatorio_entrada.html', {
+        'movimentacoes': movs, 'empresa_selecionada': empresa_sel, 
+        'total_periodo': total_periodo
+    })
+from datetime import datetime
+from .nfe_service import emitir_nfe_saida  # <--- Importante!
+
+@login_required
+def retirada_peca_view(request):
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    pecas = Peca.objects.filter(ativo=True, empresa=empresa_sel).order_by('nome')
+    
+    if request.method == 'POST':
+        try:
+            peca_id = request.POST.get('peca_id')
+            qtd = int(request.POST.get('quantidade', 0))
+            
+            # 1. CAPTURA O CHECKBOX DO HTML
+            # Se marcado, vem 'on'. Se não, vem None.
+            gerar_nota = request.POST.get('gerar_nota') == 'on' 
+
+            if not peca_id: raise ValueError("Nenhuma peça selecionada.")
+            peca = get_object_or_404(Peca, id=peca_id, empresa=empresa_sel)
+            
+            if qtd <= 0: raise ValueError("A quantidade deve ser maior que zero.")
+            
+            if peca.estoque_atual < qtd:
+                messages.error(request, f"Estoque Insuficiente! Saldo: {peca.estoque_atual}")
+                return render(request, 'core_rh/retirada_form.html', {
+                    'pecas': pecas, 'empresa_padrao': empresa_sel, 
+                    'filiais': MovimentacaoPeca.FILIAL_CHOICES, 'request_post': request.POST
+                })
+
+            # 2. CORREÇÃO DA DATA (Strftime Error Fix)
+            data_texto = request.POST.get('data')
+            if not data_texto: raise ValueError("Data obrigatória")
+            # Converte texto '2026-01-26' para objeto Data real
+            data_obj = datetime.strptime(data_texto, '%Y-%m-%d').date()
+
+            # 3. CRIA A MOVIMENTAÇÃO
+            mov = MovimentacaoPeca.objects.create(
+                peca=peca,
+                tipo='S',
+                quantidade=qtd,
+                valor_unitario=float(request.POST.get('valor_unitario', '0').replace(',', '.')),
+                data=data_obj,  # Usa o objeto Data aqui
+                tecnico_nome=request.POST.get('tecnico_nome'),
+                filial=request.POST.get('filial'), 
+                numero_chamado=request.POST.get('numero_chamado'),
+                observacao=request.POST.get('observacao', ''),
+                tem_nota_fiscal=gerar_nota 
+            )
+            
+            msg_sucesso = f"Saída de {qtd}x {peca.nome} realizada!"
+
+            # 4. CHAMA O SERVIÇO DE NOTA (Se marcado)
+            if gerar_nota:
+                # Garante que o objeto está atualizado no banco
+                mov.refresh_from_db() 
+                
+                # Chama seu arquivo nfe_service.py
+                resultado_nfe = emitir_nfe_saida(mov) 
+                
+                if resultado_nfe['sucesso']:
+                    mov.status_nfe = resultado_nfe['status']
+                    mov.chave_nfe = resultado_nfe.get('chave')
+                    mov.url_pdf_nfe = resultado_nfe.get('url_pdf')
+                    mov.mensagem_sefaz = resultado_nfe.get('mensagem')
+                    mov.save()
+                    msg_sucesso += " E Nota Fiscal Emitida (Simulação)!"
+                else:
+                    mov.status_nfe = "Erro na Emissão"
+                    mov.mensagem_sefaz = resultado_nfe.get('erro')
+                    mov.save()
+                    messages.warning(request, f"Saída salva, mas erro na NF: {resultado_nfe.get('erro')}")
+
+            messages.success(request, msg_sucesso)
+            return redirect(f"{reverse('relatorio_saida')}?estoque={empresa_sel}")
+
+        except Exception as e:
+            messages.error(request, f"Erro: {e}")
+            # Renderiza novamente com os dados para não perder o que digitou
+            return render(request, 'core_rh/retirada_form.html', {
+                'pecas': pecas, 'empresa_padrao': empresa_sel, 
+                'filiais': MovimentacaoPeca.FILIAL_CHOICES, 'request_post': request.POST
+            })
+
+    return render(request, 'core_rh/retirada_form.html', {
+        'pecas': pecas, 'empresa_padrao': empresa_sel, 
+        'filiais': MovimentacaoPeca.FILIAL_CHOICES
+    })
+
+@login_required
+def relatorio_saida_view(request):
+    empresa_sel = request.GET.get('estoque', 'DIVIDATA')
+    
+    # 1. Query Base com Cálculo (Annotate) para permitir ordenar por valor
+    movs = MovimentacaoPeca.objects.filter(tipo='S', peca__empresa=empresa_sel) \
+        .select_related('peca', 'peca__grupo') \
+        .annotate(valor_total_db=F('quantidade') * F('valor_unitario'))
+
+    # 2. Filtros de Data
+    dt_ini = request.GET.get('data_inicio')
+    dt_fim = request.GET.get('data_fim')
+    if dt_ini and dt_fim:
+        movs = movs.filter(data__range=[dt_ini, dt_fim])
+        
+    # 3. Ordenação
+    ordem = request.GET.get('order', '-id')
+    if 'valor_total' in ordem: ordem = ordem.replace('valor_total', 'valor_total_db')
+    
+    campos_validos = ['data', 'tecnico_nome', 'peca__nome', 'quantidade', 'valor_total_db', 'numero_chamado', 'id']
+    if ordem.lstrip('-') in campos_validos:
+        movs = movs.order_by(ordem)
+    else:
+        movs = movs.order_by('-id')
+
+    # --- 4. EXPORTAÇÃO EXCEL (Isso deve vir ANTES do render) ---
+    if request.GET.get('export') == 'xls':
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = f'attachment; filename="Saidas_{empresa_sel}.csv"'
+        writer = csv.writer(response, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        
+        # Cabeçalho do Excel
+        writer.writerow(['N Saida', 'Data', 'Tecnico', 'Filial', 'Chamado', 'Material', 'Qtd', 'V. Unit', 'V. Total'])
+        
+        for m in movs:
+            # Calcula valor total se não tiver vindo do annotate
+            v_tot = m.quantidade * m.valor_unitario
+            writer.writerow([
+                m.numero_saida if hasattr(m, 'numero_saida') else m.id,
+                m.data.strftime('%d/%m/%Y'), 
+                m.tecnico_nome, 
+                m.filial, 
+                m.numero_chamado,
+                m.peca.nome, 
+                m.quantidade, 
+                str(m.valor_unitario).replace('.', ','), 
+                str(v_tot).replace('.', ',')
+            ])
+        return response # Retorna o arquivo e PARA a execução aqui
+
+    # 5. Soma Total para o Rodapé
+    total_periodo = sum(m.quantidade * m.valor_unitario for m in movs)
+
+    return render(request, 'core_rh/relatorio_saida.html', {
+        'movimentacoes': movs, 'empresa_selecionada': empresa_sel, 
+        'total_periodo': total_periodo
+    })
+# --- ADICIONE ESTA FUNÇÃO NO FINAL DO ARQUIVO VIEWS.PY ---
+
+@login_required
+def nova_peca_view(request):
+    # --- CORREÇÃO AQUI ---
+    # Primeiro definimos a empresa pegando da URL. Se não tiver, assume DIVIDATA.
+    empresa_atual = request.GET.get('estoque', 'DIVIDATA')
+    
+    # Agora sim podemos filtrar os grupos usando a variável 'empresa_atual'
+    grupos = GrupoPeca.objects.filter(empresa=empresa_atual).order_by('nome')
+    
+    form_data = {}
+
+    if request.method == 'POST':
+        form_data = request.POST
+        try:
+            nome = request.POST.get('nome')
+            grupo_id = request.POST.get('grupo')
+            estoque_min = request.POST.get('estoque_minimo')
+            estoque_ideal = request.POST.get('estoque_ideal')
+            preco_custo = request.POST.get('preco_custo')
+            ncm = request.POST.get('ncm')
+            
+            # Garante que a empresa do POST seja usada se disponível (segurança extra)
+            empresa_save = request.POST.get('empresa_hidden') or empresa_atual
+
+            if not nome: raise ValueError("O nome é obrigatório.")
+
+            # --- LÓGICA DO CÓDIGO SEQUENCIAL ---
+            # 1. Busca o maior código APENAS desta empresa
+            maior_codigo = Peca.objects.filter(empresa=empresa_save).aggregate(Max('codigo_material'))['codigo_material__max']
+            
+            # 2. Soma +1 ou começa do 1
+            novo_codigo = 1 if maior_codigo is None else int(maior_codigo) + 1
+            
+            # Criação do objeto
+            peca = Peca()
+            peca.empresa = empresa_save
+            peca.estoque_atual = 0
+            peca.codigo_material = novo_codigo # Salva o número gerado
+            
+            peca.nome = nome
+            peca.ncm = ncm
+            peca.estoque_minimo = int(estoque_min) if estoque_min else 5
+            peca.estoque_ideal = int(estoque_ideal) if estoque_ideal else 10
+            
+            if preco_custo:
+                peca.preco_custo = float(preco_custo.replace(',', '.'))
+            
+            if grupo_id:
+                peca.grupo = get_object_or_404(GrupoPeca, id=grupo_id)
+            else:
+                peca.grupo = None
+                
+            peca.save()
+            
+            messages.success(request, f"Item #{peca.codigo_material} - {peca.nome} criado com sucesso em {empresa_save}!")
+            return redirect(f"/estoque/?estoque={empresa_save}")
+
+        except Exception as e:
+            messages.error(request, f"Erro ao salvar: {e}")
+
+    return render(request, 'core_rh/peca_form.html', {
+        'peca': None, # É nova, não tem peça existente
+        'grupos': grupos,
+        'empresa_selecionada': empresa_atual,
+        'form_data': form_data 
+    })

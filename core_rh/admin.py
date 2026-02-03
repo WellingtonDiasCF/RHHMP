@@ -13,10 +13,10 @@ import pdfplumber
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-# --- IMPORTS DOS MODELS ---
+
 from .models import (
     Funcionario, RegistroPonto, Cargo, Equipe, 
-    Ferias, Contracheque, Atestado, ControleKM, TrechoKM
+    Ferias, Contracheque, Atestado, ControleKM, TrechoKM, DespesaDiversa
 )
 from .forms import UploadLoteContrachequeForm
 
@@ -29,7 +29,7 @@ except ImportError:
 # --- PERMISSÕES PERSONALIZADAS (RH) ---
 
 def is_rh_member(user):
-    """Retorna True se o usuário é Superuser ou membro da Equipe RH"""
+    # Retorna True se o usuário é Superuser ou membro da Equipe RH
     if not user or not user.is_authenticated: return False
     if user.is_superuser: return True
     
@@ -94,8 +94,6 @@ class FuncionarioAdminForm(forms.ModelForm):
 
 # --- ADMINS ---
 
-# --- ADMINS ---
-
 @admin.register(Funcionario)
 class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     form = FuncionarioAdminForm
@@ -104,10 +102,8 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     search_fields = ('nome_completo', 'cpf', 'usuario__username', 'email')
     filter_horizontal = ('outras_equipes',)
     
-    # --- AQUI: Adicionado o admin_realtime_search.js ---
     class Media:
         js = ('js/cep_admin.js', 'js/admin_realtime_search.js',)
-    # ---------------------------------------------------
 
     fieldsets = (
         ('🔐 Acesso', {'fields': ('username', 'password', 'email', 'is_active', 'primeiro_acesso')}),
@@ -125,7 +121,6 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
     
     get_local_trabalho.short_description = 'Local de Trabalho'
 
-    # ... (métodos changelist_view e save_model mantidos iguais) ...
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         estados = Funcionario.objects.exclude(local_trabalho_estado__isnull=True).exclude(local_trabalho_estado='').values_list('local_trabalho_estado', flat=True).distinct().order_by('local_trabalho_estado')
@@ -142,7 +137,6 @@ class FuncionarioAdmin(RHAccessMixin, admin.ModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
     def save_model(self, request, obj, form, change):
-        # ... (seu código save_model original aqui) ...
         username = form.cleaned_data['username']
         email = form.cleaned_data['email']
         password = form.cleaned_data['password']
@@ -188,10 +182,8 @@ class EquipeAdmin(RHAccessMixin, admin.ModelAdmin):
     list_filter = ('local_trabalho', 'oculta') 
     filter_horizontal = ('gestores',)
     
-    # --- AQUI: Adicionada a classe Media com o script ---
     class Media:
         js = ('js/admin_realtime_search.js',)
-    # ----------------------------------------------------
     
     fields = ('nome', 'local_trabalho', 'gestor', 'gestores', 'oculta')
 
@@ -205,15 +197,38 @@ class CargoAdmin(RHAccessMixin, admin.ModelAdmin):
 
 @admin.register(RegistroPonto)
 class RegistroPontoAdmin(RHAccessMixin, admin.ModelAdmin):
-    list_display = ('funcionario', 'data', 'entrada_manha', 'saida_tarde', 'status_assinaturas')
+    # Adicionamos 'botao_pdf' na lista de exibição
+    list_display = ('funcionario', 'data', 'entrada_manha', 'saida_tarde', 'status_assinaturas', 'botao_pdf')
     list_filter = ('data', 'funcionario__equipe', 'assinado_funcionario', 'assinado_gestor')
     search_fields = ('funcionario__nome_completo',)
     date_hierarchy = 'data'
+
     def status_assinaturas(self, obj):
         func = "✅" if obj.assinado_funcionario else "❌"
         gest = "✅" if obj.assinado_gestor else "❌"
         return format_html("Func: {} | Gest: {}", func, gest)
     status_assinaturas.short_description = "Assinaturas"
+
+    # --- NOVO CÓDIGO: CRIA O BOTÃO DE DOWNLOAD ---
+    def botao_pdf(self, obj):
+        try:
+            # Tenta gerar o link. É necessário que exista uma URL nomeada 'gerar_pdf_ponto'
+            # apontando para a view gerar_pdf_ponto_view no seu urls.py
+            url = reverse('gerar_pdf_ponto') 
+            
+            # Monta o link com os parâmetros que sua view exige (funcionario_id, mes, ano)
+            link = f"{url}?funcionario_id={obj.funcionario.id}&mes={obj.data.month}&ano={obj.data.year}"
+            
+            return format_html(
+                '<a class="button" href="{}" target="_blank" style="background-color:#666; color:white; padding:3px 8px; border-radius:3px;">'
+                '<i class="fas fa-file-pdf"></i> Baixar Mês</a>',
+                link
+            )
+        except Exception as e:
+            return f"Erro URL: {e}"
+            
+    botao_pdf.short_description = "Folha do Mês"
+    botao_pdf.allow_tags = True
 
 
 @admin.register(Ferias)
@@ -262,7 +277,6 @@ class FeriasAdmin(RHAccessMixin, admin.ModelAdmin):
             self.message_user(request, f"Férias de {ferias.funcionario.nome_completo} aprovadas e concluídas com sucesso!", level=messages.SUCCESS)
         return redirect(request.META.get('HTTP_REFERER', 'admin:core_rh_ferias_changelist'))
 
-    # Redireciona para Funcionários após excluir
     def response_delete(self, request, obj_display, obj_id):
         messages.success(request, f"O registro de férias de {obj_display} foi excluído com sucesso.")
         return redirect('admin:core_rh_funcionario_changelist')
@@ -464,3 +478,8 @@ class ControleKMAdmin(RHAccessMixin, admin.ModelAdmin):
     list_display = ('funcionario', 'data', 'total_km', 'status')
     list_filter = ('status', 'data', 'funcionario')
     inlines = [TrechoKMInline]
+@admin.register(DespesaDiversa)
+class DespesaDiversaAdmin(admin.ModelAdmin):
+    list_display = ('funcionario', 'data', 'tipo', 'valor', 'status')
+    list_filter = ('status', 'tipo', 'data')
+    search_fields = ('funcionario__nome_completo', 'numero_chamado')

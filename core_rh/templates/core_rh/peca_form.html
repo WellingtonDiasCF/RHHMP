@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro - {{ empresa_selecionada }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; }</style>
+</head>
+<body class="bg-light">
+
+    <div class="container px-4 mt-5" style="max-width: 800px;">
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm mb-4">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="card border-0 shadow rounded-4">
+            <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0">
+                    <i class="fas {% if peca %}fa-edit{% else %}fa-plus-circle{% endif %} me-2"></i>
+                    {% if peca %}Editar Item #{{ peca.codigo_material }}{% else %}Novo Item{% endif %}
+                </h5>
+                <span class="badge bg-white text-primary fw-bold px-3 py-2 shadow-sm">{{ empresa_selecionada }}</span>
+            </div>
+            
+            <div class="card-body p-4">
+                <form method="POST">
+                    {% csrf_token %}
+                    
+                    <div class="alert alert-primary bg-opacity-10 border-primary border-opacity-25 d-flex align-items-center py-2 mb-4">
+                        <i class="fas fa-barcode fs-4 me-3 text-primary"></i>
+                        <div>
+                            <small class="text-uppercase text-muted fw-bold d-block" style="font-size: 0.75rem;">Código do Material (Sequencial)</small>
+                            {% if peca %}
+                                <span class="fw-bold fs-5 text-dark">#{{ peca.codigo_material }}</span>
+                            {% else %}
+                                <span class="fst-italic text-primary fw-bold">Será gerado automaticamente ao salvar (Sequencial {{ empresa_selecionada }})</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="fw-bold small mb-1">Nome do Material <span class="text-danger">*</span></label>
+                            <input type="text" name="nome" class="form-control form-control-lg" placeholder="Ex: Cabo de Rede CAT6"
+                                   value="{% if form_data.nome %}{{ form_data.nome }}{% elif peca %}{{ peca.nome }}{% endif %}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold small mb-1">NCM</label>
+                            <input type="text" name="ncm" class="form-control form-control-lg" placeholder="0000.00.00"
+                                   value="{% if form_data.ncm %}{{ form_data.ncm }}{% elif peca %}{{ peca.ncm|default:'' }}{% endif %}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold small mb-1">Grupo</label>
+                            <select name="grupo" class="form-select form-select-lg">
+                                <option value="">Sem grupo</option>
+                                {% for g in grupos %}
+                                    <option value="{{ g.id }}" 
+                                        {% if form_data.grupo and form_data.grupo == g.id|stringformat:"s" %}
+                                            selected
+                                        {% elif not form_data and peca and peca.grupo and peca.grupo.id == g.id %}
+                                            selected
+                                        {% endif %}>
+                                        {{ g.nome }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="fw-bold small mb-1">Valor Base (R$)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0">R$</span>
+                                <input type="text" name="preco_custo" class="form-control border-start-0" 
+                                       value="{% if form_data.preco_custo %}{{ form_data.preco_custo }}{% elif peca %}{{ peca.preco_custo|stringformat:'.2f' }}{% else %}0.00{% endif %}">
+                            </div>
+                            <div class="form-text" style="font-size: 11px;">Sugestão p/ movimentações</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="fw-bold small mb-1 text-danger">Estoque Mínimo</label>
+                            <input type="number" name="estoque_minimo" class="form-control" 
+                                   value="{% if form_data.estoque_minimo %}{{ form_data.estoque_minimo }}{% elif peca %}{{ peca.estoque_minimo }}{% else %}5{% endif %}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="fw-bold small mb-1 text-success">Estoque Ideal</label>
+                            <input type="number" name="estoque_ideal" class="form-control" 
+                                   value="{% if form_data.estoque_ideal %}{{ form_data.estoque_ideal }}{% elif peca %}{{ peca.estoque_ideal }}{% else %}10{% endif %}">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between pt-3 border-top">
+                        <a href="/estoque/?estoque={{ empresa_selecionada }}" class="btn btn-outline-secondary px-4 fw-bold">Cancelar</a>
+                        <button type="submit" class="btn btn-primary btn-lg fw-bold px-5 shadow-sm">
+                            <i class="fas fa-save me-2"></i> Salvar Registro
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

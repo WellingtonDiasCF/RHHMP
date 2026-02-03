@@ -1,0 +1,20 @@
+import os
+import django
+
+# 1. Configura o Django para rodar scripts soltos
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+django.setup()
+
+from django.db import connection
+
+print("💣 INICIANDO DESTRUIÇÃO TOTAL DO BANCO DE DADOS...")
+
+# 2. Conecta no banco e apaga o esquema "public" inteiro
+with connection.cursor() as cursor:
+    # O CASCADE garante que tudo (tabelas, chaves, sequencias) seja apagado
+    cursor.execute("DROP SCHEMA public CASCADE;")
+    # Recria o esquema limpo
+    cursor.execute("CREATE SCHEMA public;")
+
+print("✅ SUCESSO! O banco foi zerado.")
+print("Agora o Django não tem mais histórico nenhum e vai recriar tudo.")

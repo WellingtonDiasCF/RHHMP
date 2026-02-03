@@ -1,0 +1,218 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estoque {{ empresa_selecionada }}</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Inter', sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+        
+        /* Cores Dinâmicas */
+        {% if empresa_selecionada == 'DIVIDATA' %}
+            .navbar-custom { background: linear-gradient(135deg, #0d47a1 0%, #1565c0 100%); }
+            .text-brand { color: #0d47a1; }
+            .border-brand { border-color: #0d47a1 !important; }
+            .bg-brand-soft { background-color: rgba(13, 71, 161, 0.1); color: #0d47a1; }
+        {% else %}
+            .navbar-custom { background: linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%); }
+            .text-brand { color: #b71c1c; }
+            .border-brand { border-color: #b71c1c !important; }
+            .bg-brand-soft { background-color: rgba(183, 28, 28, 0.1); color: #b71c1c; }
+        {% endif %}
+
+        .avatar-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom shadow mb-4">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">
+                <i class="fas fa-cubes me-2"></i> Almoxarifado TI
+            </a>
+            
+            <div class="d-flex ms-auto align-items-center gap-3">
+                <div class="dropdown">
+                    <button class="btn btn-light dropdown-toggle fw-bold text-brand shadow-sm" type="button" data-bs-toggle="dropdown">
+                        {{ empresa_selecionada }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                        <li><h6 class="dropdown-header">Alternar Visualização</h6></li>
+                        <li><a class="dropdown-item fw-bold" href="?estoque=DIVIDATA"><i class="fas fa-building me-2 text-primary"></i> DIVIDATA</a></li>
+                        <li><a class="dropdown-item fw-bold" href="?estoque=TORINO"><i class="fas fa-building me-2 text-danger"></i> TORINO</a></li>
+                    </ul>
+                </div>
+                <a href="{% url 'home' %}" class="btn btn-outline-light btn-sm rounded-pill px-3">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4" style="max-width: 1600px;">
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm border-0 mb-4">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="fw-bold text-dark mb-0">Visão Geral</h3>
+                <p class="text-muted small">Gerenciando estoque da <strong>{{ empresa_selecionada }}</strong></p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'lista_pecas' %}?estoque={{ empresa_selecionada }}" class="btn btn-light border shadow-sm fw-bold">
+                    <i class="fas fa-list me-2"></i> Catálogo
+                </a>
+                <div class="btn-group shadow-sm">
+                    <a href="{% url 'relatorio_entrada' %}?estoque={{ empresa_selecionada }}" class="btn btn-light border fw-bold"><i class="fas fa-arrow-down text-success"></i> Entradas</a>
+                    <a href="{% url 'relatorio_saida' %}?estoque={{ empresa_selecionada }}" class="btn btn-light border fw-bold"><i class="fas fa-arrow-up text-danger"></i> Saídas</a>
+                </div>
+                <div class="vr mx-2 text-muted"></div>
+                <a href="{% url 'entrada_peca' %}?estoque={{ empresa_selecionada }}" class="btn btn-success fw-bold shadow-sm px-4">
+                    <i class="fas fa-plus me-2"></i> Entrada
+                </a>
+                <a href="{% url 'retirada_peca' %}?estoque={{ empresa_selecionada }}" class="btn btn-danger fw-bold shadow-sm px-4">
+                    <i class="fas fa-minus me-2"></i> Saída
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="card h-100 border-start border-4 border-brand">
+                    <div class="card-body d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase">Itens Cadastrados</span>
+                            <h2 class="fw-bold text-dark mb-0">{{ total_itens }}</h2>
+                        </div>
+                        <div class="avatar-icon bg-brand-soft"><i class="fas fa-microchip fa-lg"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border-start border-4 border-success">
+                    <div class="card-body d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase">Valor Patrimonial</span>
+                            <h2 class="fw-bold text-success mb-0">R$ {{ valor_inventario|floatformat:2 }}</h2>
+                        </div>
+                        <div class="avatar-icon bg-success-subtle text-success"><i class="fas fa-dollar-sign fa-lg"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 border-start border-4 border-warning">
+                    <div class="card-body d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase">Abaixo do Mínimo</span>
+                            <h2 class="fw-bold text-warning mb-0">{{ baixo_estoque_count }}</h2>
+                        </div>
+                        <div class="avatar-icon bg-warning-subtle text-warning"><i class="fas fa-exclamation-triangle fa-lg"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-history me-2 text-muted"></i> Últimas Movimentações</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light small text-uppercase">
+                                <tr>
+                                    <th class="ps-4">Tipo</th>
+                                    <th>Material</th>
+                                    <th>Local / Detalhe</th>
+                                    <th>Responsável</th>
+                                    <th class="text-end pe-4">Data</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mov in movimentacoes %}
+                                <tr>
+                                    <td class="ps-4">
+                                        {% if mov.tipo == 'E' %}
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1">Entrada</span>
+                                        {% else %}
+                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1">Saída</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">{{ mov.peca.nome }}</div>
+                                        <small class="text-muted">#{{ mov.peca.codigo_material }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="badge bg-light text-dark border">{{ mov.filial }}</div>
+                                        <div class="small text-muted mt-1">
+                                            {% if mov.tipo == 'S' %}
+                                                {{ mov.numero_chamado|default:"" }}
+                                            {% else %}
+                                                NF: {{ mov.nota_fiscal|default:"-" }}
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td><small class="fw-bold">{{ mov.tecnico_nome|default:"-" }}</small></td>
+                                    <td class="text-end pe-4 small text-muted">
+                                        <div>{{ mov.data|date:"d/m/Y" }}</div>
+                                        <small>Qtd: <strong>{{ mov.quantidade }}</strong></small>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted">
+                                        Nenhuma movimentação recente.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-header bg-white py-3 border-bottom border-warning border-3">
+                        <h6 class="fw-bold mb-0 text-dark">
+                            <i class="fas fa-bell me-2 text-warning"></i> Alertas de Reposição
+                        </h6>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        {% for item in baixo_estoque_list %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+                            <div>
+                                <span class="fw-bold d-block text-dark">{{ item.nome }}</span>
+                                <small class="text-muted">#{{ item.codigo_material }} | Mín: {{ item.estoque_minimo }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-danger rounded-pill px-3">Saldo: {{ item.estoque_atual }}</span>
+                            </div>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-center py-5 text-muted">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3 opacity-50"></i>
+                            <p class="mb-0 fw-bold">Tudo Certo!</p>
+                            <small>Nenhum item abaixo do mínimo.</small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

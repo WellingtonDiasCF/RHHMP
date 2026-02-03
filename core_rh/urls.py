@@ -78,4 +78,25 @@ urlpatterns = [
     path('gestor/relatorio/customizado/', views.gerar_relatorio_customizado, name='gerar_relatorio_customizado'),
     path('gestao/pdf-pagamento/<int:equipe_id>/<int:ano>/<int:mes>/<int:semana>/', views.gerar_pdf_pagamento_equipe, name='gerar_pdf_pagamento_equipe'),
     path('gestao/atualizar-km-equipe/<int:equipe_id>/', views.atualizar_valor_km_equipe, name='atualizar_valor_km_equipe'),
+# Dashboard Principal
+    path('estoque/', views.estoque_pecas_dashboard, name='estoque_pecas_dashboard'),
+    
+    # Catálogo e Cadastro
+    path('estoque/pecas/', views.lista_pecas_view, name='lista_pecas'),
+    path('estoque/pecas/nova/', views.nova_peca_view, name='nova_peca'),
+    path('estoque/pecas/editar/<int:peca_id>/', views.editar_peca_view, name='editar_peca'),
+    
+    # Entrada (Registro e Relatório)
+    path('estoque/entrada/', views.entrada_peca_view, name='entrada_peca'),
+    path('estoque/relatorio/entrada/', views.relatorio_entrada_view, name='relatorio_entrada'),
+    
+    # Saída (Registro e Relatório)
+    path('estoque/saida/', views.retirada_peca_view, name='retirada_peca'),
+    path('estoque/relatorio/saida/', views.relatorio_saida_view, name='relatorio_saida'),
+    # Dashboard e Catálogo
+    path('estoque/', views.estoque_pecas_dashboard, name='estoque_pecas_dashboard'),
+    path('estoque/pecas/', views.lista_pecas_view, name='lista_pecas'),
+    
+    # Grupos (NOVO)
+    path('estoque/grupos/', views.gerenciar_grupos_view, name='gerenciar_grupos'),
 ]
