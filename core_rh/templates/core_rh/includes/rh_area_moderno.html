@@ -144,17 +144,16 @@
                             <td class="text-end pe-4">
                                 <div class="d-flex gap-2 justify-content-end align-items-center">
                                     
-
-                                    
                                     {% if item.arquivo_anexo %}
                                         <a href="{{ item.arquivo_anexo }}" download="{{ item.nome_download }}" 
                                            class="btn btn-sm btn-success rounded-pill fw-bold shadow-sm" title="Baixar PDF Assinado">
-                                           <i class="fas fa-file-pdf"></i>
+                                            <i class="fas fa-file-pdf"></i>
                                         </a>
                                     {% else %}
-                                        <button class="btn btn-sm btn-light border rounded-pill text-muted" disabled title="Sem arquivo">
-                                            <i class="fas fa-file-pdf"></i>
-                                        </button>
+                                        <a href="{{ item.url_pdf_gerado }}" target="_blank"
+                                           class="btn btn-sm btn-primary rounded-pill fw-bold shadow-sm" title="Gerar PDF do Sistema">
+                                            <i class="fas fa-print"></i>
+                                        </a>
                                     {% endif %}
                                     
                                     {% if item.status_gestor %}
