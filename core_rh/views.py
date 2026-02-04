@@ -180,11 +180,14 @@ def home(request):
     tem_ferias = False 
     is_campo = False
     equipes_gestor = []
+    
+    # Variável de controle do estoque
+    can_access_estoque = False
 
     try:
         funcionario = Funcionario.objects.get(usuario=request.user)
         
-        # Verifica se é gestor (Principal ou Lista) de equipes NÃO ocultas
+        # 1. Verifica se é gestor
         equipes_lideradas = Equipe.objects.filter(
             Q(oculta=False) & (Q(gestor=funcionario) | Q(gestores=funcionario))
         ).distinct()
@@ -193,25 +196,36 @@ def home(request):
             is_gestor = True
             equipes_gestor = equipes_lideradas
 
-        # --- LÓGICA DE FÉRIAS ATUALIZADA ---
+        # 2. Verifica Férias
         hoje = timezone.now().date()
         if Ferias.objects.filter(
             funcionario=funcionario, 
             data_fim__gte=hoje
         ).exclude(arquivo_aviso='').exists():
             tem_ferias = True
-        # -----------------------------------
             
         is_campo = usuario_eh_campo(request.user)
         
+        # --- CORREÇÃO DA PERMISSÃO DE ESTOQUE ---
+        # Verifica se a EQUIPE do funcionário é "Estoque" (Principal ou Secundária)
+        if funcionario.equipe and funcionario.equipe.nome.strip().lower() == 'estoque':
+            can_access_estoque = True
+        elif funcionario.outras_equipes.filter(nome__iexact='Estoque').exists():
+            can_access_estoque = True
+            
     except Funcionario.DoesNotExist: 
         pass 
     
     can_access_rh_area = usuario_eh_rh(request.user)
     
-    # --- NOVA LÓGICA: Apenas Grupo "Estoque" ou Superuser ---
-    # RH não entra aqui, a menos que também esteja no grupo Estoque
-    can_access_estoque = request.user.is_superuser or request.user.groups.filter(name='Estoque').exists()
+    # --- PERMISSÃO FINAL DO ESTOQUE ---
+    # Libera se:
+    # 1. Já foi liberado pela Equipe acima
+    # 2. OU se for Superusuário
+    # 3. OU se estiver no Grupo de Permissões "Estoque" do Django Admin
+    if not can_access_estoque:
+        if request.user.is_superuser or request.user.groups.filter(name='Estoque').exists():
+            can_access_estoque = True
     
     return render(request, 'core_rh/index.html', {
         'is_gestor': is_gestor or request.user.is_superuser, 
@@ -219,7 +233,7 @@ def home(request):
         'can_access_rh_area': can_access_rh_area,
         'tem_ferias': tem_ferias,
         'is_campo': is_campo, 
-        'can_access_estoque': can_access_estoque, # Enviando para o HTML
+        'can_access_estoque': can_access_estoque, 
     })
 
 @login_required
