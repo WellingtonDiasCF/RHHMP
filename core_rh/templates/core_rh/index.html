@@ -7,10 +7,9 @@
     <meta name="color-scheme" content="light">
     <title>Portal DIVIDATA | Início</title>
     
-<script>
+    <script>
         document.documentElement.setAttribute('data-bs-theme', 'light');
         if (window.matchMedia) {
-            // Tenta sobrescrever a preferência do sistema
             try {
                 var meta = document.createElement('meta');
                 meta.name = "color-scheme";
@@ -28,44 +27,26 @@
     <meta name="theme-color" content="#FF6600">
 
     <style>
-        :root {
-            color-scheme: light;
-        }
+        :root { color-scheme: light; }
         body {
             background-color: #f4f7f6 !important;
-            
             font-family: 'Inter', sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            justify-content: center; /* Centraliza verticalmente se houver espaço */
+            justify-content: center;
             align-items: center;
             padding: 20px;
-            /* Força cor de texto escura mesmo se algo escapar */
             color: #2c3e50 !important;
         }
 
-        /* Em telas pequenas, remove a centralização forçada para permitir scroll natural */
         @media (max-width: 768px) {
-            body {
-                justify-content: flex-start;
-                padding-top: 40px;
-            }
+            body { justify-content: flex-start; padding-top: 40px; }
         }
 
-        .welcome-section {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
-
-        .welcome-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #2c3e50;
-            margin-bottom: 0.5rem;
-        }
-
-        /* Ajuste de fonte no mobile */
+        .welcome-section { text-align: center; margin-bottom: 3rem; }
+        .welcome-title { font-size: 2.5rem; font-weight: 700; color: #2c3e50; margin-bottom: 0.5rem; }
+        
         @media (max-width: 576px) {
             .welcome-title { font-size: 1.8rem; }
             .welcome-subtitle { font-size: 0.95rem; }
@@ -76,11 +57,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
-        .welcome-subtitle {
-            font-size: 1.1rem;
-            color: #7f8c8d;
-        }
+        .welcome-subtitle { font-size: 1.1rem; color: #7f8c8d; }
 
         /* CARD MODERNO */
         .menu-card {
@@ -120,9 +97,7 @@
             transition: transform 0.3s ease;
         }
 
-        .menu-card:hover .card-icon-box {
-            transform: scale(1.1) rotate(5deg);
-        }
+        .menu-card:hover .card-icon-box { transform: scale(1.1) rotate(5deg); }
 
         /* Cores Específicas */
         .card-admin .card-icon-box { background: rgba(52, 152, 219, 0.1); color: #3498db; }
@@ -131,6 +106,9 @@
         .card-ferias .card-icon-box { background: rgba(155, 89, 182, 0.1); color: #9b59b6; }
         .card-contracheque .card-icon-box { background: #02b42f86; color: #027a20ff; }
         .card-atestado .card-icon-box { background: rgba(231, 76, 60, 0.1); color: #e74c3c; }
+        
+        /* ESTILO DO BOTÃO DE ESTOQUE */
+        .card-estoque .card-icon-box { background: rgba(23, 162, 184, 0.1); color: #17a2b8; }
 
         .card-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
         .card-desc { font-size: 0.9rem; color: #95a5a6; }
@@ -159,16 +137,10 @@
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('{% url "service-worker" %}')
-        .then(function(reg) {
-          console.log('App RH registrado com sucesso:', reg.scope);
-        }).catch(function(err) {
-          console.log('Falha ao registrar App RH:', err);
-        });
+        .then(function(reg) { console.log('App RH registrado:', reg.scope); })
+        .catch(function(err) { console.log('Falha ao registrar App RH:', err); });
       }
     </script>
-<link rel="icon" type="image/svg+xml" href="{% static 'images/icon.svg' %}">
-    <link rel="apple-touch-icon" href="{% static 'images/icon.svg' %}">
-    <meta name="theme-color" content="#FF6600">
 </head>
 <body>
 
@@ -186,6 +158,16 @@
                     <div class="card-icon-box"><i class="fa-solid fa-building-user"></i></div>
                     <span class="card-title">Área RH</span>
                     <span class="card-desc">Gerenciar sistema e equipes</span>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if can_access_estoque %}
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'estoque_pecas_dashboard' %}" class="menu-card card-estoque">
+                    <div class="card-icon-box"><i class="fa-solid fa-boxes-stacked"></i></div>
+                    <span class="card-title">Estoque & Peças</span>
+                    <span class="card-desc">Controle de Inventário</span>
                 </a>
             </div>
             {% endif %}
@@ -233,6 +215,7 @@
                 </a>
             </div>
             {% endif %}
+            
             {% if is_campo %}
             <div class="col-12 col-md-6 col-lg-3">
                 <a href="{% url 'registro_km' %}" class="menu-card card-km">

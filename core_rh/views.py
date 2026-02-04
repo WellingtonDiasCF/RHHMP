@@ -194,8 +194,6 @@ def home(request):
             equipes_gestor = equipes_lideradas
 
         # --- LÓGICA DE FÉRIAS ATUALIZADA ---
-        # O botão aparece se houver um registro de férias com arquivo gerado 
-        # E se a data de fim das férias ainda não passou (data_fim >= hoje).
         hoje = timezone.now().date()
         if Ferias.objects.filter(
             funcionario=funcionario, 
@@ -211,12 +209,17 @@ def home(request):
     
     can_access_rh_area = usuario_eh_rh(request.user)
     
+    # --- NOVA LÓGICA: Apenas Grupo "Estoque" ou Superuser ---
+    # RH não entra aqui, a menos que também esteja no grupo Estoque
+    can_access_estoque = request.user.is_superuser or request.user.groups.filter(name='Estoque').exists()
+    
     return render(request, 'core_rh/index.html', {
         'is_gestor': is_gestor or request.user.is_superuser, 
         'equipes_lideradas': equipes_gestor,
         'can_access_rh_area': can_access_rh_area,
         'tem_ferias': tem_ferias,
         'is_campo': is_campo, 
+        'can_access_estoque': can_access_estoque, # Enviando para o HTML
     })
 
 @login_required
