@@ -106,8 +106,6 @@
         .card-ferias .card-icon-box { background: rgba(155, 89, 182, 0.1); color: #9b59b6; }
         .card-contracheque .card-icon-box { background: #02b42f86; color: #027a20ff; }
         .card-atestado .card-icon-box { background: rgba(231, 76, 60, 0.1); color: #e74c3c; }
-        
-        /* ESTILO DO BOTÃO DE ESTOQUE */
         .card-estoque .card-icon-box { background: rgba(23, 162, 184, 0.1); color: #17a2b8; }
 
         .card-title { font-weight: 700; font-size: 1.25rem; margin-bottom: 0.5rem; }
@@ -162,22 +160,28 @@
             </div>
             {% endif %}
 
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'meus_atestados' %}" class="menu-card card-atestado">
+                    <div class="card-icon-box"><i class="fa-solid fa-notes-medical"></i></div>
+                    <span class="card-title">Atestados</span>
+                    <span class="card-desc">Envie comprovantes e declarações</span>
+                </a>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'meus_contracheques' %}" class="menu-card card-contracheque">
+                    <div class="card-icon-box"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+                    <span class="card-title">Contracheque</span>
+                    <span class="card-desc">Visualize e confirme o recebimento</span>
+                </a>
+            </div>
+
             {% if can_access_estoque %}
             <div class="col-12 col-md-6 col-lg-3">
                 <a href="{% url 'estoque_pecas_dashboard' %}" class="menu-card card-estoque">
                     <div class="card-icon-box"><i class="fa-solid fa-boxes-stacked"></i></div>
                     <span class="card-title">Estoque & Peças</span>
                     <span class="card-desc">Controle de Inventário</span>
-                </a>
-            </div>
-            {% endif %}
-
-            {% if is_gestor %}
-            <div class="col-12 col-md-6 col-lg-3">
-                <a href="{% url 'area_gestor' %}" class="menu-card card-gestor">
-                    <div class="card-icon-box"><i class="fa-solid fa-users-cog"></i></div>
-                    <span class="card-title">Minha Equipe</span>
-                    <span class="card-desc">Aprovar pontos e assinaturas</span>
                 </a>
             </div>
             {% endif %}
@@ -190,21 +194,15 @@
                 </a>
             </div>
 
+            {% if is_gestor %}
             <div class="col-12 col-md-6 col-lg-3">
-                <a href="{% url 'meus_contracheques' %}" class="menu-card card-contracheque">
-                    <div class="card-icon-box"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-                    <span class="card-title">Contracheque</span>
-                    <span class="card-desc">Visualize e confirme o recebimento</span>
+                <a href="{% url 'area_gestor' %}" class="menu-card card-gestor">
+                    <div class="card-icon-box"><i class="fa-solid fa-users-cog"></i></div>
+                    <span class="card-title">Minha Equipe</span>
+                    <span class="card-desc">Aprovar pontos e assinaturas</span>
                 </a>
             </div>
-
-            <div class="col-12 col-md-6 col-lg-3">
-                <a href="{% url 'meus_atestados' %}" class="menu-card card-atestado">
-                    <div class="card-icon-box"><i class="fa-solid fa-notes-medical"></i></div>
-                    <span class="card-title">Atestados</span>
-                    <span class="card-desc">Envie comprovantes e declarações</span>
-                </a>
-            </div>
+            {% endif %}
 
             {% if tem_ferias %}
             <div class="col-12 col-md-6 col-lg-3">
