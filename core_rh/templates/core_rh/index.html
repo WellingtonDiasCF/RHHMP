@@ -150,6 +150,16 @@
     <div class="container">
         <div class="row g-4 justify-content-center">
             
+            {% if can_access_estoque %}
+            <div class="col-12 col-md-6 col-lg-3">
+                <a href="{% url 'estoque_pecas_dashboard' %}" class="menu-card card-estoque">
+                    <div class="card-icon-box"><i class="fa-solid fa-boxes-stacked"></i></div>
+                    <span class="card-title">Almoxarifado</span>
+                    <span class="card-desc">Controle de Inventário</span>
+                </a>
+            </div>
+            {% endif %}
+
             {% if can_access_rh_area %}
             <div class="col-12 col-md-6 col-lg-3">
                 <a href="/admin/" class="menu-card card-admin">
@@ -175,16 +185,6 @@
                     <span class="card-desc">Visualize e confirme o recebimento</span>
                 </a>
             </div>
-
-            {% if can_access_estoque %}
-            <div class="col-12 col-md-6 col-lg-3">
-                <a href="{% url 'estoque_pecas_dashboard' %}" class="menu-card card-estoque">
-                    <div class="card-icon-box"><i class="fa-solid fa-boxes-stacked"></i></div>
-                    <span class="card-title">Estoque & Peças</span>
-                    <span class="card-desc">Controle de Inventário</span>
-                </a>
-            </div>
-            {% endif %}
 
             <div class="col-12 col-md-6 col-lg-3">
                 <a href="{% url 'folha_ponto' %}" class="menu-card card-ponto">
